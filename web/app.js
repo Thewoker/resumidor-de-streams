@@ -77,7 +77,74 @@ function renderProgress(status) {
 }
 
 let vods = [], current = null, detail = null, transcript = [], hls = null;
-let filter = "all", markIn = null, markOut = null, lastMomentsJson = "", activeId = null;
+let filter = "all", markIn = null, markOut = null, lastMomentsJson = "", activeId = null, view = "streams";
+
+// ---------- confirmación ----------
+function confirmDialog({ title, message, requireText = false, okText = "Borrar" }) {
+  const dlg = $("#confirm");
+  $("h3", dlg).textContent = title;
+  $(".msg", dlg).textContent = message;
+  const label = $(".type", dlg), input = $("input", label), ok = $(".ok", dlg);
+  label.classList.toggle("hidden", !requireText);
+  input.value = "";
+  ok.textContent = okText;
+  ok.disabled = requireText;
+  input.oninput = () => { ok.disabled = input.value.trim().toUpperCase() !== "BORRAR"; };
+  dlg.showModal();
+  if (requireText) input.focus();
+  return new Promise((resolve) => {
+    ok.onclick = () => { dlg.close(); resolve(true); };
+    $(".cancel", dlg).onclick = () => { dlg.close(); resolve(false); };
+    dlg.oncancel = () => resolve(false);
+  });
+}
+
+// ---------- vista de aprobados ----------
+async function showApproved() {
+  view = "approved";
+  $("#tab-streams").classList.remove("on");
+  $("#tab-approved").classList.add("on");
+  const main = $("#main");
+  const items = await api("/api/approved");
+  main.innerHTML = `<h2>⭐ Clips aprobados <span class="muted">(${items.length})</span></h2>`;
+  if (!items.length) {
+    main.innerHTML += `<p class="empty">Todavía no aprobaste ningún clip.<br>Aprobalos desde cada stream y aparecen acá.</p>`;
+    return;
+  }
+  const grid = document.createElement("div");
+  grid.className = "gallery";
+  for (const m of items) {
+    const base = `/files/${m.key}/clips/`;
+    const el = document.createElement("article");
+    el.innerHTML = `<video controls preload="metadata" src="${base + m.file}"></video>
+      <h4></h4><p class="from muted"></p>
+      <div class="acts">
+        ${m.vertical ? `<button class="ghost v">Ver vertical</button><button class="ghost h">Ver horizontal</button>` : ""}
+        <button class="ghost open">Ir al stream</button>
+        <span class="downloads"><a href="${base + m.file}" download>⬇ horizontal</a>${
+          m.vertical ? `<a href="${base + m.vertical}" download>⬇ vertical</a>` : ""}</span>
+      </div>`;
+    $("h4", el).textContent = m.title;
+    $(".from", el).textContent = `${m.vod_title} · ${fmt(m.start)} · ${Math.round(m.end - m.start)} s`;
+    const video = $("video", el);
+    if (m.vertical) {
+      $(".v", el).onclick = () => { video.src = base + m.vertical; };
+      $(".h", el).onclick = () => { video.src = base + m.file; };
+    }
+    $(".open", el).onclick = () => { showStreams(); openVod(m.key); };
+    grid.appendChild(el);
+  }
+  main.appendChild(grid);
+}
+
+function showStreams() {
+  view = "streams";
+  $("#tab-approved").classList.remove("on");
+  $("#tab-streams").classList.add("on");
+  $("#vods").classList.remove("hidden");
+  if (current) openVod(current);
+  else $("#main").innerHTML = `<p class="empty">Elegí un stream de la izquierda.</p>`;
+}
 
 // ---------- lista de VODs ----------
 async function loadVods(refresh = false) {
@@ -105,6 +172,9 @@ async function loadVods(refresh = false) {
 // ---------- vista de un VOD ----------
 async function openVod(key) {
   current = key;
+  view = "streams";
+  $("#tab-approved").classList.remove("on");
+  $("#tab-streams").classList.add("on");
   lastMomentsJson = "";
   markIn = markOut = null;
   const main = $("#main");
@@ -126,6 +196,21 @@ async function openVod(key) {
   }
   video.ontimeupdate = onTime;
 
+  $(".cleanup").onclick = async () => {
+    const extra = detail.moments.filter((m) => m.file && m.status !== "approved").length;
+    const keep = detail.moments.filter((m) => m.status === "approved").length;
+    if (!extra) return alert("No hay clips para borrar: todos los que tienen archivo están aprobados.");
+    const ok = await confirmDialog({
+      title: "Borrar clips no aprobados",
+      message: `Se borran los archivos de ${extra} clip(s) de este stream.\nSe conservan los ${keep} aprobado(s).\n\nLos momentos siguen en la lista y podés volver a cortarlos cuando quieras. Esto no se puede deshacer.`,
+      requireText: true,
+      okText: `Borrar ${extra} clips`,
+    });
+    if (!ok) return;
+    const r = await api(`/api/vods/${key}/cleanup`, { method: "POST" });
+    await refreshDetail();
+    alert(`Borrados ${r.deleted} clips · ${r.freed_mb} MB liberados`);
+  };
   $(".process").onclick = async () => { await api(`/api/vods/${key}/process`, { method: "POST" }); refreshDetail(); loadVods(); };
   $(".mark-in").onclick = () => { markIn = video.currentTime; updateManual(); };
   $(".mark-out").onclick = () => { markOut = video.currentTime; updateManual(); };
@@ -306,7 +391,19 @@ function momentCard(m) {
   approve.textContent = m.status === "approved" ? "↺ Quitar aprobado" : "✓ Aprobar";
   discard.textContent = m.status === "discarded" ? "↺ Recuperar" : "✕ Descartar";
   approve.onclick = () => patch(m, { status: m.status === "approved" ? "pending" : "approved" });
-  discard.onclick = () => patch(m, { status: m.status === "discarded" ? "pending" : "discarded" });
+  discard.onclick = async () => {
+    if (m.status === "discarded") return patch(m, { status: "pending" });
+    if (m.file) {
+      const ok = await confirmDialog({
+        title: "Descartar y borrar el clip",
+        message: `“${m.title}”\n${fmt(m.start)} · ${Math.round(m.end - m.start)} s\n\nSe borran los archivos del clip (horizontal y vertical). El momento queda marcado como descartado y podés volver a cortarlo más adelante.`,
+        okText: "Descartar y borrar",
+      });
+      if (!ok) return;
+      await api(`/api/vods/${current}/moments/${m.id}/files`, { method: "DELETE" });
+    }
+    await patch(m, { status: "discarded" });
+  };
 
   if (m.file && !m.cutting) {
     $(".downloads", el).innerHTML =
@@ -321,11 +418,14 @@ async function patch(m, changes, refresh = true) {
 }
 
 // ---------- arranque ----------
-$("#refresh").onclick = () => loadVods(true);
+$("#refresh").onclick = () => (view === "approved" ? showApproved() : loadVods(true));
+$("#tab-approved").onclick = showApproved;
+$("#tab-streams").onclick = showStreams;
 loadVods();
 let tick = 0;
 setInterval(() => {
   tick++;
+  if (view === "approved") return;
   const st = detail?.status?.state;
   const busy = st === "processing" || st === "queued" || detail?.moments.some((m) => m.cutting);
   if (busy) refreshDetail();          // cada 2 s mientras procesa

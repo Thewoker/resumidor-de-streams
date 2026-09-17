@@ -11,9 +11,22 @@
 <body>
 <header>
   <h1>🎬 Resumidor de streams</h1>
+  <nav class="tabs">
+    <button id="tab-streams" class="ghost on">Streams</button>
+    <button id="tab-approved" class="ghost">⭐ Aprobados</button>
+  </nav>
   <span id="queue" class="muted"></span>
   <button id="refresh" class="ghost">Actualizar</button>
 </header>
+<dialog id="confirm">
+  <h3></h3>
+  <p class="msg"></p>
+  <label class="type hidden">Escribí <b>BORRAR</b> para confirmar:<input></label>
+  <div class="dialog-actions">
+    <button class="ghost cancel">Cancelar</button>
+    <button class="danger ok">Borrar</button>
+  </div>
+</dialog>
 <div class="layout">
   <aside id="vods"></aside>
   <main id="main"><p class="empty">Elegí un stream de la izquierda.</p></main>
@@ -25,7 +38,10 @@
       <h2 class="title"></h2>
       <p class="muted info"></p>
     </div>
-    <button class="process">Procesar</button>
+    <div class="head-actions">
+      <button class="cleanup ghost">🗑 Borrar clips no aprobados</button>
+      <button class="process">Procesar</button>
+    </div>
   </section>
   <section class="progress" hidden>
     <div class="progress-head">

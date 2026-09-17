@@ -20,6 +20,27 @@ aside { border-right: 1px solid var(--line); overflow-y: auto; max-height: calc(
 main { padding: 16px 20px 60px; min-width: 0; }
 .empty { color: var(--muted); text-align: center; margin-top: 20vh; }
 
+.hidden { display: none !important; }
+.tabs { display: flex; gap: 6px; }
+.tabs button.on { border-color: var(--accent); color: var(--text); }
+button.danger { background: var(--bad); color: #1a0505; }
+.head-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+
+dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 12px; padding: 20px; max-width: 460px; }
+dialog::backdrop { background: rgba(0, 0, 0, .6); }
+dialog h3 { margin: 0 0 8px; }
+dialog .msg { white-space: pre-wrap; margin: 0 0 12px; }
+dialog label { display: block; margin-bottom: 14px; }
+dialog label input { display: block; width: 100%; margin-top: 6px; }
+.dialog-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.gallery article { background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; padding: 10px; }
+.gallery video { width: 100%; border-radius: 6px; background: #000; }
+.gallery h4 { margin: 8px 0 2px; font-size: 14px; }
+.gallery .from { font-size: 12px; }
+.gallery .acts { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; align-items: center; }
+
 .vod { padding: 10px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
 .vod:hover, .vod.on { background: var(--panel2); }
 .vod b { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

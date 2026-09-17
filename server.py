@@ -245,6 +245,72 @@ def add_moment(key: str, body: NewMoment):
     return m
 
 
+def _delete_files(workdir: Path, m):
+    """Borra los archivos de un momento (horizontal, vertical y subtítulos). Devuelve los bytes liberados."""
+    freed = 0
+    clips = workdir / "clips"
+    for name in (m.get("file"), m.get("vertical")):
+        if not name:
+            continue
+        for path in (clips / name, clips / (Path(name).stem + ".srt")):
+            if path.exists():
+                freed += path.stat().st_size
+                path.unlink()
+    m["file"] = m["vertical"] = None
+    return freed
+
+
+@app.delete("/api/vods/{key}/moments/{mid}/files")
+def delete_moment_files(key: str, mid: int):
+    workdir = OUT / key
+    with pipeline.lock:
+        moments = read_json(workdir / "moments.json", [])
+        m = next((x for x in moments if x["id"] == mid), None)
+        if not m:
+            raise HTTPException(404, "Momento no encontrado")
+        freed = _delete_files(workdir, m)
+        write_json(workdir / "moments.json", moments)
+    return {"freed_mb": round(freed / 1e6, 1), "moment": m}
+
+
+@app.post("/api/vods/{key}/cleanup")
+def cleanup_vod(key: str):
+    """Borra los clips que no estén aprobados y los archivos sueltos que ya no usa nadie."""
+    workdir = OUT / key
+    clips = workdir / "clips"
+    freed, count = 0, 0
+    with pipeline.lock:
+        moments = read_json(workdir / "moments.json", [])
+        for m in moments:
+            if m.get("status") != "approved" and (m.get("file") or m.get("vertical")):
+                freed += _delete_files(workdir, m)
+                count += 1
+        write_json(workdir / "moments.json", moments)
+        keep = {n for m in moments for n in (m.get("file"), m.get("vertical")) if n}
+        keep |= {Path(n).stem + ".srt" for n in keep}
+        for path in clips.glob("*") if clips.exists() else []:
+            if path.name not in keep:
+                freed += path.stat().st_size
+                path.unlink()
+    return {"deleted": count, "freed_mb": round(freed / 1e6, 1)}
+
+
+@app.get("/api/approved")
+def list_approved():
+    items = []
+    for d in sorted(OUT.iterdir()):
+        if not d.is_dir():
+            continue
+        meta = read_json(d / "meta.json")
+        if not meta:
+            continue
+        for m in read_json(d / "moments.json", []):
+            if m.get("status") == "approved":
+                items.append({**m, "key": d.name, "vod_title": meta.get("title") or d.name,
+                              "created_at": meta.get("created_at")})
+    return sorted(items, key=lambda m: (m.get("created_at") or "", -m.get("score", 0)), reverse=True)
+
+
 @app.get("/api/queue")
 def queue_info():
     return {"jobs": jobs.qsize(), "cuts": cuts.qsize(), "processing": sorted(queued)}
