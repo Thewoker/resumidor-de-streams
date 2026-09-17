@@ -46,7 +46,7 @@ def peaks(z: np.ndarray, threshold=2.5, gap=5):
     result = []
     for i in idx:
         if result and i - result[-1][1] <= gap:
-            result[-1][1] = i
+            result[-1][1] = int(i)
             result[-1][2] = max(result[-1][2], float(z[i]))
         else:
             result.append([int(i), int(i), float(z[i])])

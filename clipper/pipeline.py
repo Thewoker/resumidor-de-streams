@@ -30,9 +30,16 @@ def read_json(path: Path, default=None):
         return default
 
 
+def _plain(o):
+    # Tipos de numpy (int64, float32...) que json no sabe guardar
+    if hasattr(o, "item"):
+        return o.item()
+    raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
+
+
 def write_json(path: Path, data):
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1, default=_plain), encoding="utf-8")
     tmp.replace(path)
 
 
