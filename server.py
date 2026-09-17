@@ -128,6 +128,11 @@ def startup():
         meta = read_json(d / "meta.json") if d.is_dir() else None
         if st and meta and st["state"] in ("queued", "processing") and meta.get("source"):
             enqueue({**meta, "uuid": d.name})
+    # Restos de ejecuciones anteriores: VOD y wav pesan GB y ya no hacen falta
+    for d in OUT.iterdir():
+        st = read_json(d / "status.json") if d.is_dir() else None
+        if st and st["state"] in ("done", "error") and d.name not in queued:
+            pipeline.clean_temp(d)
     for target in (job_worker, cut_worker, watcher):
         threading.Thread(target=target, daemon=True).start()
 

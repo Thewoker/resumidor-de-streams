@@ -113,6 +113,21 @@ class Progress:
         })
 
 
+def clean_temp(workdir: Path):
+    """Borra el VOD descargado y el wav: pesan GB y no sirven para nada una vez sacados los clips.
+    Se conservan transcripción y análisis, que son los que hacen rápido reprocesar."""
+    freed = 0
+    for path in list(workdir.glob("video.*")) + list(workdir.glob("audio*.wav")):
+        try:
+            freed += path.stat().st_size
+            path.unlink()
+        except OSError:
+            pass
+    if freed:
+        print(f"  liberados {freed / 1e9:.1f} GB de archivos temporales en {workdir.name}")
+    return freed
+
+
 def cut_moment(workdir: Path, m, video, transcript, s):
     """Corta (o recorta de nuevo) un momento. `video` puede ser archivo local o la URL .m3u8."""
     clips = workdir / "clips"
@@ -139,9 +154,15 @@ def process(source, s, key, title="", meta=None):
     p = Progress(workdir)
     expected = float(meta.get("duration") or 0)  # duración según Kick, para el % de descarga
 
+    cached = all((workdir / f).exists() for f in ("transcript.json", "llm_moments.json", "loudness.npy"))
+
     try:
-        # 1. Descarga
-        if [x for x in workdir.glob("video.*") if ".part" not in x.name]:
+        # 1. Descarga (si ya está todo analizado, se corta directo desde Kick sin bajar nada)
+        if cached and not [x for x in workdir.glob("video.*") if ".part" not in x.name]:
+            p.skip("download", "No hace falta: ya está analizado y se corta desde Kick")
+            p.skip("audio", "Audio ya analizado")
+            video, total = source, float(meta.get("duration") or read_json(workdir / "timeline.json", {}).get("duration") or 0)
+        elif [x for x in workdir.glob("video.*") if ".part" not in x.name]:
             p.skip("download", "Vídeo ya descargado, se reutiliza")
         else:
             p.start("download", "Conectando con Kick…")
@@ -156,17 +177,21 @@ def process(source, s, key, title="", meta=None):
                 p.update(frac, f"{fmt(seconds)}{of} del stream · {megas:,.0f} MB{speed_txt}")
 
             media.get_video(source, workdir, on_download)
-        video = media.get_video(source, workdir)
-        total = media.duration(video)
 
-        # 2. Audio
-        if (workdir / "audio.wav").exists():
-            p.skip("audio")
+        if not cached or [x for x in workdir.glob("video.*") if ".part" not in x.name]:
+            video = media.get_video(source, workdir)
+            total = media.duration(video)
+
+            # 2. Audio
+            if (workdir / "audio.wav").exists():
+                p.skip("audio")
+            else:
+                p.start("audio", "Separando el audio del vídeo…")
+                media.extract_audio(video, workdir, lambda sec: p.update(sec / total, f"{fmt(sec)} de {fmt(total)}"))
+            wav = media.extract_audio(video, workdir)
+            p.done("Audio separado")
         else:
-            p.start("audio", "Separando el audio del vídeo…")
-            media.extract_audio(video, workdir, lambda sec: p.update(sec / total, f"{fmt(sec)} de {fmt(total)}"))
-        wav = media.extract_audio(video, workdir)
-        p.done("Audio separado")
+            wav = workdir / "audio.wav"  # no existe, pero loudness ya está cacheado
 
         # 3. Volumen
         p.start("volume", "Midiendo el volumen de cada segundo…")
@@ -220,9 +245,8 @@ def process(source, s, key, title="", meta=None):
         p.done(f"{len(to_cut)} clips cortados")
 
         # El VOD pesa varios GB: los recortes posteriores se hacen desde la URL de Kick
-        if not s.keep_video and video.parent == workdir:
-            video.unlink(missing_ok=True)
-            wav.unlink(missing_ok=True)
+        if not s.keep_video:
+            clean_temp(workdir)
 
         minutes = int((time.time() - p.started) / 60)
         p.finish(f"Listo en {minutes} min")
@@ -230,6 +254,8 @@ def process(source, s, key, title="", meta=None):
         notify.telegram(f"🎬 {title or key}\n{len(moments)} momentos, {len(lines)} clips\n\n" + "\n".join(lines))
         return moments
     except Exception as e:
+        if not s.keep_video:
+            clean_temp(workdir)  # si falla, tampoco dejamos GB tirados (se vuelve a descargar al reintentar)
         p.fail(str(e))
         notify.telegram(f"❌ Error procesando {title or key}: {e}")
         raise
