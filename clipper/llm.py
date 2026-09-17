@@ -21,6 +21,14 @@ Responde SOLO con JSON:
 Cada momento debe durar entre 10 y 75 segundos e incluir el contexto necesario para entenderse."""
 
 
+def unload(url, model):
+    """Saca el modelo de la VRAM (Whisper y Ollama no caben juntos en 8 GB)."""
+    try:
+        requests.post(f"{url}/api/generate", json={"model": model, "keep_alive": 0}, timeout=30)
+    except requests.RequestException:
+        pass
+
+
 def _windows(transcript, size=150, step=120):
     if not transcript:
         return

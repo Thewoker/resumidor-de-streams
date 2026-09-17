@@ -22,17 +22,23 @@ pip install -r requirements.txt
 
 ## Uso
 
-```bash
-# Un VOD concreto (URL de Kick o archivo local)
-python clip.py https://kick.com/elmemesolitario/videos/<uuid>
+Interfaz web (vigila el canal, procesa VODs nuevos y permite revisar, ajustar y aprobar clips):
 
-# Vigilar el canal y procesar cada VOD nuevo
-python watch.py --backfill 3
+```bash
+uvicorn server:app --host 0.0.0.0 --port 8000
 ```
 
-Opciones: `--top 15`, `--min-score 6`, `--no-vertical`, `--cpu`, `--keep-video`.
+Por línea de comandos:
 
-Resultados en `output/<vod>/`: `clips/`, `report.md`, `report.json`.
+```bash
+python clip.py https://kick.com/elmemesolitario/videos/<uuid>
+```
+
+Resultados en `$OUTPUT_DIR/<vod>/`: `clips/`, `moments.json`, `transcript.json`, `timeline.json`.
+
+## Docker / Coolify
+
+Build pack Dockerfile, puerto 8000, volumen persistente en `/data`, y `--gpus all` en Custom Docker Options (requiere nvidia-container-toolkit en el host).
 
 ## Variables de entorno
 
@@ -42,5 +48,11 @@ Resultados en `output/<vod>/`: `clips/`, `report.md`, `report.json`.
 | `OLLAMA_MODEL` | `qwen2.5:7b` |
 | `WHISPER_MODEL` | `large-v3` |
 | `KICK_CHANNEL` | `elmemesolitario` |
-| `OUTPUT_DIR` | `output` |
+| `OUTPUT_DIR` | `output` (`/data/output` en Docker) |
+| `TOP_CLIPS` | `15` |
+| `MIN_SCORE` | `6` |
+| `AUTO_PROCESS` | `1` |
+| `CHECK_INTERVAL` | `600` |
+| `SKIP_TITLES` | (vacío, p. ej. `meteoro`) |
+| `APP_PASSWORD` | (vacío = sin contraseña) |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | (opcional) |

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Resumidor de streams</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>">
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>🎬 Resumidor de streams</h1>
+  <span id="queue" class="muted"></span>
+  <button id="refresh" class="ghost">Actualizar</button>
+</header>
+<div class="layout">
+  <aside id="vods"></aside>
+  <main id="main"><p class="empty">Elegí un stream de la izquierda.</p></main>
+</div>
+
+<template id="vod-view">
+  <section class="vod-head">
+    <div>
+      <h2 class="title"></h2>
+      <p class="muted info"></p>
+    </div>
+    <button class="process">Procesar</button>
+  </section>
+  <section class="player-wrap">
+    <video class="player" controls playsinline></video>
+    <canvas class="timeline" height="70"></canvas>
+    <div class="manual">
+      <span class="muted">Clip manual:</span>
+      <button class="ghost mark-in">Inicio = ahora</button>
+      <button class="ghost mark-out">Fin = ahora</button>
+      <span class="range muted">—</span>
+      <button class="create" disabled>Crear clip</button>
+    </div>
+    <p class="now-text muted"></p>
+  </section>
+  <nav class="filters">
+    <button data-f="all" class="on">Todos</button>
+    <button data-f="clips">Con clip</button>
+    <button data-f="approved">Aprobados</button>
+    <button data-f="pending">Pendientes</button>
+    <button data-f="discarded">Descartados</button>
+  </nav>
+  <section class="moments"></section>
+</template>
+
+<template id="moment-card">
+  <article class="moment">
+    <div class="media"></div>
+    <div class="body">
+      <div class="row">
+        <span class="score"></span>
+        <input class="name">
+      </div>
+      <p class="reason muted"></p>
+      <div class="times">
+        <label>Inicio <button class="ghost s-" title="-2s">−</button><input class="start"><button class="ghost s+" title="+2s">+</button></label>
+        <label>Fin <button class="ghost e-" title="-2s">−</button><input class="end"><button class="ghost e+" title="+2s">+</button></label>
+        <span class="dur muted"></span>
+      </div>
+      <details><summary class="muted">Transcripción</summary><p class="text"></p></details>
+      <div class="actions">
+        <button class="ghost watch">▶ Ver en el stream</button>
+        <button class="ghost recut">✂ Cortar</button>
+        <button class="ghost approve">✓ Aprobar</button>
+        <button class="ghost discard">✕ Descartar</button>
+        <span class="downloads"></span>
+      </div>
+    </div>
+  </article>
+</template>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
