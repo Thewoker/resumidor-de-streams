@@ -12,6 +12,69 @@ const fmt = (t) => {
 };
 const parse = (txt) => txt.split(":").map(Number).reduce((a, b) => a * 60 + b, 0);
 const STATUS = { done: "Listo", processing: "Procesando", queued: "En cola", error: "Error" };
+const dur = (sec) => {
+  sec = Math.max(0, Math.round(sec));
+  if (sec < 60) return `${sec} s`;
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+  return h ? `${h} h ${m} min` : `${m} min ${sec % 60} s`;
+};
+
+// Traduce errores técnicos a algo accionable
+function explainError(err) {
+  if (!err) return "";
+  if (/CUDA|cuda|NVIDIA|nvidia/.test(err)) return "La gráfica no está disponible dentro del contenedor. Revisá que \"--gpus all\" esté en Custom Docker Options de Coolify y hacé Redeploy.";
+  if (/out of memory|OOM/i.test(err)) return "La gráfica se quedó sin memoria. Puede que Ollama u otro programa la esté usando.";
+  if (/11434|Ollama|Connection refused/i.test(err)) return "No se pudo conectar con Ollama. Revisá OLLAMA_URL y que el servicio esté encendido.";
+  if (/ffmpeg/i.test(err)) return "Falló ffmpeg al procesar el vídeo.";
+  if (/403|404|kick/i.test(err)) return "No se pudo descargar el VOD de Kick (puede que se haya borrado o sea privado).";
+  return "";
+}
+
+function renderProgress(status) {
+  const box = $(".progress");
+  if (!box) return;
+  const st = status?.state;
+  if (!st || st === "done" || (!status.steps && st !== "queued" && st !== "error")) { box.hidden = true; return; }
+  box.hidden = false;
+
+  const now = Date.now() / 1000;
+  const overall = status.progress || 0;
+  const elapsed = status.started ? (st === "error" ? status.updated : now) - status.started : 0;
+  const title = st === "queued" ? "⏳ En cola, esperando a que termine otro stream"
+    : st === "error" ? "❌ El procesado se detuvo"
+    : `Procesando · ${Math.round(overall * 100)}%`;
+  $(".progress-title").textContent = title;
+  $(".progress-times").textContent = elapsed > 0 ? `Lleva ${dur(elapsed)}` : "";
+  $(".bar.big > div").style.width = `${overall * 100}%`;
+  $(".bar.big > div").style.background = st === "error" ? "var(--bad)" : "";
+
+  const ol = $(".steps");
+  ol.innerHTML = "";
+  for (const s of status.steps || []) {
+    const li = document.createElement("li");
+    li.className = s.state;
+    const icon = { done: "✓", running: '<span class="spin"></span>', error: "✕", pending: "○" }[s.state];
+    let right = "";
+    if (s.state === "running") {
+      const took = now - (s.started || now);
+      const pct = Math.round((s.progress || 0) * 100);
+      // Estimación de lo que falta solo cuando ya hay avance suficiente para que sea fiable
+      const eta = s.progress > 0.03 && took > 10 ? ` · faltan ~${dur(took / s.progress - took)}` : "";
+      right = `${pct}%${eta}`;
+    } else if (s.state === "done" && s.ended && s.started) {
+      right = s.ended - s.started >= 1 ? dur(s.ended - s.started) : "";
+    }
+    li.innerHTML = `<span class="icon">${icon}</span><span class="label"></span><span class="pct">${right}</span>
+      ${s.state === "running" ? `<div class="bar"><div style="width:${(s.progress || 0) * 100}%"></div></div>` : ""}
+      <span class="detail"></span>`;
+    $(".label", li).textContent = s.label;
+    $(".detail", li).textContent = s.detail || "";
+    ol.appendChild(li);
+  }
+
+  const hint = explainError(status.error);
+  $(".progress-error").textContent = st === "error" ? [hint, `Detalle técnico: ${status.error}`].filter(Boolean).join("\n") : "";
+}
 
 let vods = [], current = null, detail = null, transcript = [], hls = null;
 let filter = "all", markIn = null, markOut = null, lastMomentsJson = "", activeId = null;
@@ -25,8 +88,10 @@ async function loadVods(refresh = false) {
     const st = v.status?.state;
     const el = document.createElement("div");
     el.className = "vod" + (v.key === current ? " on" : "");
+    const pct = st === "processing" && v.status.progress != null ? Math.round(v.status.progress * 100) : null;
     el.innerHTML = `<b></b><span class="muted"></span><br>
-      <span class="badge ${st || ""}">${st ? STATUS[st] : "Sin procesar"}</span>
+      <span class="badge ${st || ""}">${st ? STATUS[st] : "Sin procesar"}${pct != null
+        ? ` ${pct}% <span class="mini"><i style="width:${pct}%"></i></span>` : ""}</span>
       ${v.moments ? `<span class="badge">${v.moments} momentos · ${v.approved} ✓</span>` : ""}`;
     $("b", el).textContent = v.title || v.key;
     $("span.muted", el).textContent = `${(v.created_at || "").slice(0, 10)} · ${fmt(v.duration || 0)}`;
@@ -100,8 +165,9 @@ function renderDetail() {
   const st = status?.state;
   $(".vod-head .info").textContent = [
     (meta.created_at || "").slice(0, 16), fmt(meta.duration || 0),
-    st ? `${STATUS[st]}${status.step ? " · " + status.step : ""}${status.error ? " · " + status.error : ""}` : "Sin procesar",
+    st === "done" ? `Listo${status.step ? " · " + status.step : ""}` : st ? STATUS[st] : "Sin procesar",
   ].join(" · ");
+  renderProgress(status);
   const btn = $(".process");
   btn.disabled = st === "processing" || st === "queued";
   btn.textContent = st === "done" || st === "error" ? "Volver a procesar" : "Procesar";
@@ -257,8 +323,11 @@ async function patch(m, changes, refresh = true) {
 // ---------- arranque ----------
 $("#refresh").onclick = () => loadVods(true);
 loadVods();
+let tick = 0;
 setInterval(() => {
-  loadVods();
+  tick++;
   const st = detail?.status?.state;
-  if (st === "processing" || st === "queued" || detail?.moments.some((m) => m.cutting)) refreshDetail();
-}, 5000);
+  const busy = st === "processing" || st === "queued" || detail?.moments.some((m) => m.cutting);
+  if (busy) refreshDetail();          // cada 2 s mientras procesa
+  if (tick % (busy ? 2 : 3) === 0) loadVods();
+}, 2000);

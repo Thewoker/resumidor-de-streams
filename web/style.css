@@ -36,7 +36,30 @@ main { padding: 16px 20px 60px; min-width: 0; }
 .manual { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .now-text { min-height: 20px; margin: 8px 0 0; font-style: italic; }
 
-.filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.progress { margin: 14px 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.progress-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.progress-title { font-size: 15px; }
+.bar { height: 6px; background: var(--panel2); border-radius: 3px; overflow: hidden; }
+.bar > div { height: 100%; width: 0; background: var(--accent); border-radius: 3px; transition: width .6s ease; }
+.bar.big { height: 10px; border-radius: 5px; margin-bottom: 12px; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.steps li { display: grid; grid-template-columns: 24px 1fr auto; gap: 4px 10px; align-items: center; padding: 6px 8px; border-radius: 6px; }
+.steps li.running { background: var(--panel2); }
+.steps li .icon { text-align: center; font-size: 15px; }
+.steps li .label { font-weight: 600; }
+.steps li.pending .label, .steps li.pending .icon { color: var(--muted); font-weight: 500; }
+.steps li .pct { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; }
+.steps li .detail { grid-column: 2 / 4; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.steps li .bar { grid-column: 2 / 4; }
+.steps li.error .label { color: var(--bad); }
+.spin { display: inline-block; width: 13px; height: 13px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.progress-error { color: var(--bad); margin: 10px 0 0; white-space: pre-wrap; }
+.progress-error:empty { display: none; }
+.badge .mini { display: inline-block; width: 40px; height: 4px; background: var(--line); border-radius: 2px; vertical-align: middle; margin-left: 4px; overflow: hidden; }
+.badge .mini > i { display: block; height: 100%; background: currentColor; }
+
+.filters {display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
 .filters button { background: var(--panel2); color: var(--muted); border: 1px solid var(--line); font-weight: 500; }
 .filters button.on { color: var(--text); border-color: var(--accent); }
 

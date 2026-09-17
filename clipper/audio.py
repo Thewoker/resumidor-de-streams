@@ -6,8 +6,8 @@ import numpy as np
 RATE = 16000
 
 
-def loudness(audio: Path, workdir: Path) -> np.ndarray:
-    """Volumen en dB por segundo."""
+def loudness(audio: Path, workdir: Path, on_progress=None) -> np.ndarray:
+    """Volumen en dB por segundo. on_progress(segundos_analizados)"""
     cache = workdir / "loudness.npy"
     if cache.exists():
         return np.load(cache)
@@ -22,6 +22,8 @@ def loudness(audio: Path, workdir: Path) -> np.ndarray:
             break
         a = np.frombuffer(buf[: len(buf) // 2 * 2], dtype=np.int16).astype(np.float32)
         values.append(np.sqrt(np.mean(a * a)) + 1e-6)
+        if on_progress and len(values) % 60 == 0:
+            on_progress(len(values))
     proc.wait()
     db = 20 * np.log10(np.array(values) / 32768.0)
     np.save(cache, db)

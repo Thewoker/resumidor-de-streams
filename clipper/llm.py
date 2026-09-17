@@ -41,7 +41,8 @@ def _windows(transcript, size=150, step=120):
         t += step
 
 
-def find_moments(transcript, audio_peaks, workdir: Path, url, model):
+def find_moments(transcript, audio_peaks, workdir: Path, url, model, on_progress=None):
+    """on_progress(fragmento_actual, total_fragmentos, momentos_encontrados)"""
     cache = workdir / "llm_moments.json"
     if cache.exists():
         return json.loads(cache.read_text(encoding="utf-8"))
@@ -49,6 +50,8 @@ def find_moments(transcript, audio_peaks, workdir: Path, url, model):
     moments = []
     windows = list(_windows(transcript))
     for n, (w_start, w_end, segs) in enumerate(windows, 1):
+        if on_progress:
+            on_progress(n - 1, len(windows), len(moments))
         text = "\n".join(f"[{int(s['start'])}] {s['text']}" for s in segs)
         near = [f"{p[0]}-{p[1]}s (fuerza {p[2]:.1f})" for p in audio_peaks if w_start <= p[0] <= w_end]
         user = f"Fragmento {int(w_start)}s - {int(w_end)}s\nPicos de volumen: {', '.join(near) or 'ninguno'}\n\n{text}"
