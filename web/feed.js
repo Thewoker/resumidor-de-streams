@@ -4,8 +4,19 @@ const feed = {
 };
 
 async function openFeed(key = null) {
+  try {
+    await startFeed(key);
+  } catch (e) {
+    console.error(e);
+    $("#feed").hidden = true;
+    document.body.style.overflow = "";
+    alert(`No se pudo abrir el modo scroll: ${e.message}`);
+  }
+}
+
+async function startFeed(key) {
   feed.key = key;
-  feed.items = await api(`/api/clips?status=pending${key ? `&key=${key}` : ""}`);
+  feed.items = await api(`/api/clips?status=pending${key ? `&key=${encodeURIComponent(key)}` : ""}`);
   feed.idx = 0;
   feed.history = [];
   feed.decided = {};
@@ -35,7 +46,7 @@ function renderFeed() {
   if (!feed.items.length) {
     scroll.innerHTML = `<section class="slide end"><div class="end-box">
       <h2>No hay clips pendientes 🎉</h2>
-      <p class="muted">Todos los clips cortados ya están revisados.</p>
+      <p class="muted">No queda ningún clip sin revisar${feed.key ? " en este stream" : ""}.<br>Cuando se procese un stream, sus clips nuevos aparecen acá.</p>
       <button class="feed-exit">Volver</button></div></section>`;
     $(".feed-exit", scroll).onclick = closeFeed;
     updateCount();

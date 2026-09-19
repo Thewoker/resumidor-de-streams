@@ -45,7 +45,10 @@ async def basic_auth(request: Request, call_next):
                 pass
         if not ok:
             return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="clips"'})
-    return await call_next(request)
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"  # siempre revalida contra el servidor
+    return response
 
 
 def kick_vods(force=False):
@@ -380,6 +383,18 @@ app.mount("/files", StaticFiles(directory=OUT), name="files")
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "web"), name="static")
 
 
+WEB = Path(__file__).parent / "web"
+
+
+def _asset_version():
+    """Cambia cada vez que cambia algún archivo de la interfaz, para que el navegador no use una copia vieja."""
+    return str(int(max(p.stat().st_mtime for p in WEB.iterdir())))
+
+
 @app.get("/")
 def index():
-    return FileResponse(Path(__file__).parent / "web" / "index.html")
+    html = (WEB / "index.html").read_text(encoding="utf-8")
+    v = _asset_version()
+    for name in ("style.css", "app.js", "feed.js"):
+        html = html.replace(f"/static/{name}", f"/static/{name}?v={v}")
+    return Response(html, media_type="text/html", headers={"Cache-Control": "no-cache"})
