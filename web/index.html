@@ -14,6 +14,7 @@
   <nav class="tabs">
     <button id="tab-streams" class="ghost on">Streams</button>
     <button id="tab-approved" class="ghost">⭐ Aprobados</button>
+    <button id="open-feed">📱 Modo scroll</button>
   </nav>
   <span id="queue" class="muted"></span>
   <button id="refresh" class="ghost">Actualizar</button>
@@ -39,6 +40,7 @@
       <p class="muted info"></p>
     </div>
     <div class="head-actions">
+      <button class="feed-vod ghost">📱 Revisar en modo scroll</button>
       <button class="cleanup ghost">🗑 Borrar clips no aprobados</button>
       <button class="process">Procesar</button>
     </div>
@@ -100,6 +102,17 @@
   </article>
 </template>
 
+<div id="feed" class="feed" hidden>
+  <div class="feed-top">
+    <button class="feed-close" title="Cerrar (Esc)">✕</button>
+    <span class="feed-count"></span>
+    <button class="feed-undo" disabled title="Deshacer (Z)">↩ Deshacer</button>
+  </div>
+  <div class="feed-scroll"></div>
+  <div class="feed-help">↑↓ moverse · → aprobar · ← descartar · espacio pausa · Z deshacer · Esc salir</div>
+</div>
+
 <script src="/static/app.js"></script>
+<script src="/static/feed.js"></script>
 </body>
 </html>

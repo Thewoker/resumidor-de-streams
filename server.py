@@ -300,20 +300,56 @@ def cleanup_vod(key: str):
     return {"deleted": count, "freed_mb": round(freed / 1e6, 1)}
 
 
-@app.get("/api/approved")
-def list_approved():
+@app.get("/api/clips")
+def list_clips(status: str = "approved", key: str | None = None):
+    """Clips con archivo de todos los streams (o de uno), filtrados por estado.
+    Orden: stream más reciente primero y, dentro de cada stream, mejor puntuación primero."""
     items = []
-    for d in sorted(OUT.iterdir()):
-        if not d.is_dir():
+    for d in OUT.iterdir():
+        if not d.is_dir() or (key and d.name != key):
             continue
         meta = read_json(d / "meta.json")
         if not meta:
             continue
         for m in read_json(d / "moments.json", []):
-            if m.get("status") == "approved":
+            if m.get("status") == status and m.get("file") and not m.get("cutting"):
                 items.append({**m, "key": d.name, "vod_title": meta.get("title") or d.name,
                               "created_at": meta.get("created_at")})
-    return sorted(items, key=lambda m: (m.get("created_at") or "", -m.get("score", 0)), reverse=True)
+    items.sort(key=lambda m: m.get("score") or 0, reverse=True)
+    items.sort(key=lambda m: m.get("created_at") or "", reverse=True)
+    return items
+
+
+@app.get("/api/approved")
+def list_approved():
+    return list_clips("approved")
+
+
+class KeysBody(BaseModel):
+    keys: list[str] | None = None
+
+
+@app.post("/api/cleanup-discarded")
+def cleanup_discarded(body: KeysBody):
+    """Borra los archivos de los clips descartados (de los streams indicados o de todos)."""
+    freed, count = 0, 0
+    for d in OUT.iterdir():
+        if not d.is_dir() or (body.keys and d.name not in body.keys):
+            continue
+        path = d / "moments.json"
+        with pipeline.lock:
+            moments = read_json(path)
+            if not moments:
+                continue
+            changed = False
+            for m in moments:
+                if m.get("status") == "discarded" and (m.get("file") or m.get("vertical")):
+                    freed += _delete_files(d, m)
+                    count += 1
+                    changed = True
+            if changed:
+                write_json(path, moments)
+    return {"deleted": count, "freed_mb": round(freed / 1e6, 1)}
 
 
 @app.get("/api/queue")

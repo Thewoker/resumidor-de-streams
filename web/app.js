@@ -196,6 +196,7 @@ async function openVod(key) {
   }
   video.ontimeupdate = onTime;
 
+  $(".feed-vod").onclick = () => openFeed(key);
   $(".cleanup").onclick = async () => {
     const extra = detail.moments.filter((m) => m.file && m.status !== "approved").length;
     const keep = detail.moments.filter((m) => m.status === "approved").length;
@@ -425,7 +426,7 @@ loadVods();
 let tick = 0;
 setInterval(() => {
   tick++;
-  if (view === "approved") return;
+  if (view === "approved" || !$("#feed").hidden) return;
   const st = detail?.status?.state;
   const busy = st === "processing" || st === "queued" || detail?.moments.some((m) => m.cutting);
   if (busy) refreshDetail();          // cada 2 s mientras procesa
