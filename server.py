@@ -352,6 +352,25 @@ def cleanup_discarded(body: KeysBody):
     return {"deleted": count, "freed_mb": round(freed / 1e6, 1)}
 
 
+def _persistent():
+    """True si OUTPUT_DIR está en un volumen montado (sobrevive a los redeploys).
+    Fuera de Docker (desarrollo local) siempre es persistente."""
+    if not Path("/.dockerenv").exists():
+        return True
+    path = OUT.resolve()
+    while True:
+        if os.path.ismount(path):
+            return str(path) != "/"
+        if path.parent == path:
+            return False
+        path = path.parent
+
+
+@app.get("/api/health")
+def health():
+    return {"persistent": _persistent(), "output_dir": str(OUT.resolve())}
+
+
 @app.get("/api/queue")
 def queue_info():
     return {"jobs": jobs.qsize(), "cuts": cuts.qsize(), "processing": sorted(queued)}

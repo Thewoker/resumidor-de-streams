@@ -22,6 +22,9 @@ main { padding: 16px 20px 60px; min-width: 0; }
 .empty { color: var(--muted); text-align: center; margin-top: 20vh; }
 
 .hidden { display: none !important; }
+.warning { background: #3a1414; border-bottom: 1px solid var(--bad); color: #ffd6d5; padding: 10px 16px; line-height: 1.6; }
+.warning[hidden] { display: none; }
+.warning code { background: #0005; padding: 1px 5px; border-radius: 4px; }
 .tabs { display: flex; gap: 6px; }
 .tabs button.on { border-color: var(--accent); color: var(--text); }
 button.danger { background: var(--bad); color: #1a0505; }

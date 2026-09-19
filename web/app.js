@@ -422,6 +422,11 @@ async function patch(m, changes, refresh = true) {
 $("#refresh").onclick = () => (view === "approved" ? showApproved() : loadVods(true));
 $("#tab-approved").onclick = showApproved;
 $("#tab-streams").onclick = showStreams;
+api("/api/health").then((h) => {
+  if (h.persistent) return;
+  $("#storage-warning .dir").textContent = h.output_dir;
+  $("#storage-warning").hidden = false;
+}).catch(() => {});
 loadVods();
 let tick = 0;
 setInterval(() => {
