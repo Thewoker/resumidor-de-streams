@@ -199,6 +199,20 @@ def vod_detail(key: str):
     }
 
 
+@app.get("/api/vods/{key}/loudness")
+def vod_loudness(key: str, start: float = 0, end: float = 0):
+    """Volumen segundo a segundo en un tramo, para el zoom del editor de corte."""
+    import numpy as np
+
+    path = OUT / key / "loudness.npy"
+    if not path.exists():
+        return {"step": 1, "start": 0, "values": []}
+    db = np.load(path)
+    z = pipeline.audio.excitement(db)
+    a, b = max(0, int(start)), min(len(z), int(end) if end else len(z))
+    return {"step": 1, "start": a, "values": [round(float(v), 2) for v in z[a:b]]}
+
+
 @app.get("/api/vods/{key}/transcript")
 def vod_transcript(key: str):
     return [{"start": x["start"], "end": x["end"], "text": x["text"]}

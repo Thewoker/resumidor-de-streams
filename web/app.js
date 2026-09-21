@@ -106,7 +106,9 @@ async function showApproved() {
   $("#tab-approved").classList.add("on");
   const main = $("#main");
   const items = await api("/api/approved");
-  main.innerHTML = `<h2>⭐ Clips aprobados <span class="muted">(${items.length})</span></h2>`;
+  main.innerHTML = `<div class="vod-head"><h2>⭐ Clips aprobados <span class="muted">(${items.length})</span></h2>
+    ${items.length ? `<button class="feed-approved">📱 Verlos en modo scroll</button>` : ""}</div>`;
+  if (items.length) $(".feed-approved", main).onclick = () => openFeed(null, "approved");
   if (!items.length) {
     main.innerHTML += `<p class="empty">Todavía no aprobaste ningún clip.<br>Aprobalos desde cada stream y aparecen acá.</p>`;
     return;
@@ -388,6 +390,7 @@ function momentCard(m) {
     video.scrollIntoView({ behavior: "smooth", block: "center" });
     drawTimeline();
   };
+  $(".trim", el).onclick = () => openTrim(current, m);
   const approve = $(".approve", el), discard = $(".discard", el);
   approve.textContent = m.status === "approved" ? "↺ Quitar aprobado" : "✓ Aprobar";
   discard.textContent = m.status === "discarded" ? "↺ Recuperar" : "✕ Descartar";
@@ -422,6 +425,12 @@ async function patch(m, changes, refresh = true) {
 $("#refresh").onclick = () => (view === "approved" ? showApproved() : loadVods(true));
 $("#tab-approved").onclick = showApproved;
 $("#tab-streams").onclick = showStreams;
+// La cabecera crece al reducir el ancho: el panel lateral tiene que arrancar justo debajo
+const header = document.querySelector("header");
+const syncHeader = () => document.documentElement.style.setProperty("--header-h", `${header.offsetHeight}px`);
+new ResizeObserver(syncHeader).observe(header);
+syncHeader();
+
 api("/api/health").then((h) => {
   if (h.persistent) return;
   $("#storage-warning .dir").textContent = h.output_dir;

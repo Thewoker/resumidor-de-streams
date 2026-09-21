@@ -1,11 +1,11 @@
 // Modo scroll: revisar clips uno detrás de otro como shorts y aprobar/descartar.
 const feed = {
-  items: [], idx: 0, key: null, history: [], decided: {}, observer: null,
+  items: [], idx: 0, key: null, status: "pending", history: [], decided: {}, observer: null,
 };
 
-async function openFeed(key = null) {
+async function openFeed(key = null, status = "pending") {
   try {
-    await startFeed(key);
+    await startFeed(key, status);
   } catch (e) {
     console.error(e);
     $("#feed").hidden = true;
@@ -14,9 +14,10 @@ async function openFeed(key = null) {
   }
 }
 
-async function startFeed(key) {
+async function startFeed(key, status = "pending") {
   feed.key = key;
-  feed.items = await api(`/api/clips?status=pending${key ? `&key=${encodeURIComponent(key)}` : ""}`);
+  feed.status = status;
+  feed.items = await api(`/api/clips?status=${status}${key ? `&key=${encodeURIComponent(key)}` : ""}`);
   feed.idx = 0;
   feed.history = [];
   feed.decided = {};
@@ -45,8 +46,10 @@ function renderFeed() {
 
   if (!feed.items.length) {
     scroll.innerHTML = `<section class="slide end"><div class="end-box">
-      <h2>No hay clips pendientes 🎉</h2>
-      <p class="muted">No queda ningún clip sin revisar${feed.key ? " en este stream" : ""}.<br>Cuando se procese un stream, sus clips nuevos aparecen acá.</p>
+      <h2>${feed.status === "approved" ? "No hay clips aprobados" : "No hay clips pendientes 🎉"}</h2>
+      <p class="muted">${feed.status === "approved"
+        ? "Aprobá algún clip y acá los podés repasar uno detrás de otro."
+        : `No queda ningún clip sin revisar${feed.key ? " en este stream" : ""}.<br>Cuando se procese un stream, sus clips nuevos aparecen acá.`}</p>
       <button class="feed-exit">Volver</button></div></section>`;
     $(".feed-exit", scroll).onclick = closeFeed;
     updateCount();
@@ -69,6 +72,7 @@ function renderFeed() {
 
 function slide(m, i) {
   const base = `/files/${m.key}/clips/`;
+  const approvedMode = feed.status === "approved";
   const el = document.createElement("section");
   el.className = "slide";
   el.dataset.i = i;
@@ -85,9 +89,10 @@ function slide(m, i) {
       </div>
     </div>
     <div class="side">
-      <button class="like" title="Aprobar (→)"><span>👍</span><small>Aprobar</small></button>
+      <button class="like" title="${approvedMode ? "Mantener aprobado" : "Aprobar"} (→)"><span>👍</span><small>${approvedMode ? "Mantener" : "Aprobar"}</small></button>
       <button class="dislike" title="Descartar (←)"><span>👎</span><small>Descartar</small></button>
       ${m.vertical ? `<button class="flip" title="Cambiar formato"><span>⇆</span><small>Horizontal</small></button>` : ""}
+      <a class="dl" download href="${base + (m.vertical || m.file)}" title="Descargar"><span>⬇</span><small>Descargar</small></a>
       <button class="skip" title="Saltar (↓)"><span>⏭</span><small>Saltar</small></button>
     </div>`;
   const video = $("video", el);
@@ -165,7 +170,9 @@ async function decide(i, status) {
   $(".feed-undo").disabled = false;
 
   const stamp = $(".stamp", el);
-  stamp.textContent = status === "approved" ? "👍 APROBADO" : "👎 DESCARTADO";
+  stamp.textContent = status === "approved"
+    ? (feed.status === "approved" ? "👍 SE QUEDA" : "👍 APROBADO")
+    : "👎 DESCARTADO";
   stamp.className = `stamp show ${status}`;
   el.classList.remove("approved", "discarded");
   el.classList.add(status);
@@ -219,7 +226,7 @@ function renderEnd() {
   const skipped = feed.items.length - approved - discarded;
   end.innerHTML = `<div class="end-box">
     <h2>¡Terminaste! 🎬</h2>
-    <p class="big"><span>👍 ${approved} aprobados</span><span>👎 ${discarded} descartados</span>${
+    <p class="big"><span>👍 ${approved} ${feed.status === "approved" ? "se quedan" : "aprobados"}</span><span>👎 ${discarded} descartados</span>${
       skipped ? `<span>⏭ ${skipped} sin decidir</span>` : ""}</p>
     ${discarded ? `<p class="muted">Los descartados siguen ocupando espacio hasta que los borres.</p>
       <button class="danger del">🗑 Borrar los ${discarded} descartados</button>` : ""}

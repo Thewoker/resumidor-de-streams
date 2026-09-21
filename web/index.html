@@ -98,6 +98,7 @@
       <details><summary class="muted">Transcripción</summary><p class="text"></p></details>
       <div class="actions">
         <button class="ghost watch">▶ Ver en el stream</button>
+        <button class="ghost trim">✂ Ajustar corte</button>
         <button class="ghost recut">✂ Cortar</button>
         <button class="ghost approve">✓ Aprobar</button>
         <button class="ghost discard">✕ Descartar</button>
@@ -106,6 +107,42 @@
     </div>
   </article>
 </template>
+
+<dialog id="trimmer">
+  <div class="trim-head">
+    <b class="trim-title"></b>
+    <button class="ghost trim-close">✕</button>
+  </div>
+  <video class="trim-video" controls playsinline></video>
+  <div class="trim-bar">
+    <button class="ghost zoom-out" title="Alejar">🔍−</button>
+    <span class="zoom-label muted"></span>
+    <button class="ghost zoom-in" title="Acercar">🔍+</button>
+    <button class="ghost go-start">⟨ ir al inicio</button>
+    <button class="ghost go-end">ir al fin ⟩</button>
+    <span class="spacer"></span>
+    <button class="ghost play-sel">▶ Ver selección</button>
+    <span class="sel-info muted"></span>
+  </div>
+  <canvas class="trim-canvas" height="110"></canvas>
+  <p class="trim-help muted">Arrastrá los bordes verdes para mover inicio y fin · arrastrá el centro para desplazar todo · rueda para hacer zoom · clic para mover la reproducción</p>
+  <div class="trim-fields">
+    <label>Inicio
+      <button class="ghost s2-">−2s</button><button class="ghost s05-">−0,5s</button>
+      <input class="t-start"><button class="ghost s05+">+0,5s</button><button class="ghost s2+">+2s</button>
+      <button class="ghost s-now" title="Poner el inicio donde está la reproducción">⏱ aquí</button>
+    </label>
+    <label>Fin
+      <button class="ghost e2-">−2s</button><button class="ghost e05-">−0,5s</button>
+      <input class="t-end"><button class="ghost e05+">+0,5s</button><button class="ghost e2+">+2s</button>
+      <button class="ghost e-now" title="Poner el fin donde está la reproducción">⏱ aquí</button>
+    </label>
+  </div>
+  <div class="dialog-actions">
+    <button class="ghost cancel">Cancelar</button>
+    <button class="save">✂ Guardar y cortar</button>
+  </div>
+</dialog>
 
 <div id="feed" class="feed" hidden>
   <div class="feed-top">
@@ -119,5 +156,6 @@
 
 <script src="/static/app.js"></script>
 <script src="/static/feed.js"></script>
+<script src="/static/trim.js"></script>
 </body>
 </html>

@@ -19,11 +19,23 @@ def write_srt(transcript, start, end, path: Path, words_per_line=4):
         w for s in transcript if s["end"] > start and s["start"] < end
         for w in s["words"] if start <= w["start"] < end
     ]
+    # Agrupar por palabras, cortando también en silencios o cuando la línea dura demasiado
+    groups, chunk = [], []
+    for w in words:
+        if chunk and (len(chunk) >= words_per_line
+                      or w["start"] - chunk[-1]["end"] > 0.7
+                      or w["end"] - chunk[0]["start"] > 3.5):
+            groups.append(chunk)
+            chunk = []
+        chunk.append(w)
+    if chunk:
+        groups.append(chunk)
+
     lines = []
-    for i in range(0, len(words), words_per_line):
-        chunk = words[i: i + words_per_line]
-        text = " ".join(w["word"] for w in chunk).upper()
-        lines.append(f"{len(lines) + 1}\n{_ts(chunk[0]['start'] - start)} --> {_ts(chunk[-1]['end'] - start)}\n{text}\n")
+    for g in groups:
+        text = " ".join(w["word"] for w in g).upper()
+        end_ts = min(g[-1]["end"], g[0]["start"] + 5)
+        lines.append(f"{len(lines) + 1}\n{_ts(g[0]['start'] - start)} --> {_ts(end_ts - start)}\n{text}\n")
     path.write_text("\n".join(lines), encoding="utf-8")
 
 

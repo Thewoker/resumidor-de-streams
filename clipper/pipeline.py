@@ -142,7 +142,9 @@ def cut_moment(workdir: Path, m, video, transcript, s):
         srt = clips / f"{name}.srt"
         cut.write_srt(transcript, m["start"], m["end"], srt)
         m["vertical"] = f"{name}_vertical.mp4"
-        cut.vertical(video, m["start"], m["end"], clips / m["vertical"], srt.name, s.cpu)
+        # El vertical se hace a partir del horizontal ya cortado: así empieza exactamente en 0 y
+        # los subtítulos quedan sincronizados aunque el corte venga del HLS de Kick.
+        cut.vertical(clips / m["file"], 0, m["end"] - m["start"], clips / m["vertical"], srt.name, s.cpu)
     return m
 
 
