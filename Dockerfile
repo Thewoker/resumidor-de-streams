@@ -12,7 +12,9 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
+# El pip de Ubuntu 22.04 (22.0.2) falla al resolver estas dependencias con un AssertionError
+RUN pip3 install --no-cache-dir --upgrade "pip>=24" setuptools wheel \
+    && pip3 install --no-cache-dir -r requirements.txt
 COPY . .
 
 EXPOSE 8000
