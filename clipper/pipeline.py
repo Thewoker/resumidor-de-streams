@@ -3,7 +3,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import audio, cut, llm, media, notify, scoring, transcribe
+from . import audio, cut, edit, llm, media, notify, scoring, transcribe
 
 lock = threading.Lock()
 
@@ -136,15 +136,18 @@ def cut_moment(workdir: Path, m, video, transcript, s):
         if old:
             (clips / old).unlink(missing_ok=True)
     name = f"{m['id']:03}_{media.slug(m['title'])}_{int(time.time()) % 10000}"
+    segs = edit.segments(m)
     m["file"] = f"{name}.mp4"
-    cut.horizontal(video, m["start"], m["end"], clips / m["file"], s.cpu)
+    cut.montage(video, segs, clips / m["file"], s.cpu)
     if s.vertical:
         srt = clips / f"{name}.srt"
-        cut.write_srt(transcript, m["start"], m["end"], srt)
+        subs = (m.get("edit") or {}).get("subs") or cut.subtitle_entries(transcript, segs[0]["start"], segs[-1]["end"])
+        cut.write_srt(subs, segs, srt)
         m["vertical"] = f"{name}_vertical.mp4"
-        # El vertical se hace a partir del horizontal ya cortado: así empieza exactamente en 0 y
+        # El vertical se hace a partir del horizontal ya montado: así empieza exactamente en 0 y
         # los subtítulos quedan sincronizados aunque el corte venga del HLS de Kick.
-        cut.vertical(clips / m["file"], 0, m["end"] - m["start"], clips / m["vertical"], srt.name, s.cpu)
+        cut.vertical(clips / m["file"], 0, edit.out_duration(segs), clips / m["vertical"], srt.name, s.cpu)
+    m["out_duration"] = round(edit.out_duration(segs), 2)
     return m
 
 

@@ -9,7 +9,24 @@ Analiza streams completos de Kick y saca automáticamente los mejores momentos c
 3. Transcribe con `faster-whisper` (`large-v3`) en GPU.
 4. Una IA local (Ollama, `qwen2.5:7b`) puntúa fragmentos de la transcripción.
 5. Combina nota de la IA y picos de audio, quita solapes y se queda con los mejores.
-6. Corta clips con NVENC y avisa por Telegram.
+6. La IA propone además un montaje: qué trozos se quedan y cuáles van en cámara rápida.
+7. Corta y monta los clips con NVENC y avisa por Telegram.
+
+## Edición
+
+Cada momento guarda un plan de edición en `moments.json`:
+
+```json
+"edit": {
+  "cuts": [{"start": 601, "end": 612.5, "speed": 1}, {"start": 620, "end": 630, "speed": 2}],
+  "subs": [{"start": 602, "end": 604, "text": "lo que realmente dije"}]
+}
+```
+
+- `cuts`: trozos del stream que se quedan, en orden, cada uno con su velocidad (herramientas de **corte** y **cámara rápida**). Vacío = un solo trozo a velocidad normal.
+- `subs`: subtítulos corregidos a mano. Vacío = se usan las palabras de Whisper.
+
+Lo genera la IA al analizar el stream y se puede retocar en la interfaz con **✂ Ajustar corte**.
 
 ## Requisitos
 

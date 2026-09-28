@@ -219,11 +219,20 @@ def vod_transcript(key: str):
             for x in read_json(OUT / key / "transcript.json", [])]
 
 
+@app.get("/api/vods/{key}/subs")
+def vod_subs(key: str, start: float, end: float):
+    """Subtítulos propuestos para un tramo, tal como se quemarían en el vertical."""
+    from clipper import cut as cutmod
+
+    return cutmod.subtitle_entries(read_json(OUT / key / "transcript.json", []), start, end)
+
+
 class MomentPatch(BaseModel):
     status: str | None = None
     title: str | None = None
     start: float | None = None
     end: float | None = None
+    edit: dict | None = None  # {"cuts": [{start, end, speed}], "subs": [{start, end, text}]}
 
 
 @app.patch("/api/vods/{key}/moments/{mid}")

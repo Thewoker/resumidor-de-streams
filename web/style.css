@@ -51,6 +51,20 @@ dialog label input { display: block; width: 100%; margin-top: 6px; }
 .trim-fields label { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .trim-fields input { width: 90px; text-align: center; }
 .trim-fields button { padding: 4px 8px; }
+.trim-head .trim-sub { font-size: 12px; flex: 1; }
+.trim-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.trim-tools .spacer { flex: 1; }
+.trim-tools .speeds { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 13px; }
+.trim-tools .sp.on { border-color: var(--accent); color: var(--accent); }
+.out-dur { white-space: nowrap; }
+.subs-box { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; }
+.subs-box summary { cursor: pointer; font-weight: 600; }
+.subs-box p { font-size: 12px; margin: 8px 0; }
+.subs-list { max-height: 230px; overflow-y: auto; display: grid; gap: 6px; }
+.sub-row { display: grid; grid-template-columns: auto 1fr auto; gap: 6px; align-items: center; }
+.sub-row .txt { width: 100%; }
+.sub-row button { padding: 4px 8px; }
+.subs-actions { display: flex; gap: 8px; margin-top: 10px; }
 
 .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
 .gallery article { background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; padding: 10px; }

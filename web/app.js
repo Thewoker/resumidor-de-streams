@@ -355,9 +355,23 @@ function momentCard(m) {
   name.value = m.title;
   name.onchange = () => patch(m, { title: name.value });
   $(".reason", el).textContent = m.reason || "";
+  const cuts = m.edit?.cuts || [];
+  if (cuts.length) {
+    const rapidos = cuts.filter((c) => c.speed > 1).length;
+    const extra = document.createElement("p");
+    extra.className = "reason muted";
+    extra.textContent = `✂ Montado en ${cuts.length} trozos${rapidos ? ` · ${rapidos} en cámara rápida` : ""}`;
+    $(".reason", el).after(extra);
+  }
 
   const start = $(".start", el), end = $(".end", el), dur = $(".dur", el);
-  const sync = () => { start.value = fmt(m.start); end.value = fmt(m.end); dur.textContent = `${Math.round(m.end - m.start)} s`; };
+  const sync = () => {
+    start.value = fmt(m.start);
+    end.value = fmt(m.end);
+    const bruto = Math.round(m.end - m.start);
+    dur.textContent = m.out_duration && Math.abs(m.out_duration - bruto) > 1
+      ? `${Math.round(m.out_duration)} s (montado de ${bruto} s)` : `${bruto} s`;
+  };
   sync();
   const move = (field, delta) => { m[field] = Math.max(0, m[field] + delta); sync(); dirty(); };
   $(".s-", el).onclick = () => move("start", -2);

@@ -1,23 +1,29 @@
-// Editor de corte: línea de tiempo con zoom y bordes arrastrables, como el editor de clips de Twitch/Kick.
+// Editor de clips: recorte con zoom, montaje por trozos con velocidad y subtítulos editables.
 const ZOOMS = [20, 45, 90, 180, 600, 1800, 7200];
 
 const trim = {
-  key: null, m: null, dur: 0, values: [], step: 5,
-  win: [0, 60], zoom: 1, sel: [0, 0], hls: null, drag: null, stopAt: null,
+  key: null, m: null, dur: 0, values: [], step: 5, fine: null,
+  win: [0, 60], zoom: 1, segs: [], active: 0, subs: [], subsEdited: false,
+  hls: null, drag: null, stopAt: null,
 };
 
-function openTrim(key, m) {
+const segStart = () => trim.segs[0].start;
+const segEnd = () => trim.segs[trim.segs.length - 1].end;
+const outDur = () => trim.segs.reduce((a, s) => a + (s.end - s.start) / s.speed, 0);
+
+async function openTrim(key, m) {
   trim.key = key;
   trim.m = m;
-  trim.sel = [m.start, m.end];
+  const cuts = m.edit?.cuts?.length ? m.edit.cuts : [{ start: m.start, end: m.end, speed: 1 }];
+  trim.segs = cuts.map((c) => ({ start: +c.start, end: +c.end, speed: +c.speed || 1 }));
+  trim.active = 0;
   const tl = detail?.timeline || {};
   trim.values = tl.values || [];
   trim.step = tl.step || 5;
-  trim.dur = detail?.meta?.duration || tl.duration || m.end + 60;
-  // Zoom inicial: el que deja ver el clip entero con algo de margen
-  trim.zoom = Math.max(0, ZOOMS.findIndex((z) => z >= (m.end - m.start) * 1.8));
-  if (trim.zoom < 0) trim.zoom = ZOOMS.length - 1;
+  trim.dur = detail?.meta?.duration || tl.duration || segEnd() + 60;
   trim.fine = null;
+  trim.zoom = Math.max(0, ZOOMS.findIndex((z) => z >= (segEnd() - segStart()) * 1.8));
+  if (trim.zoom < 0) trim.zoom = ZOOMS.length - 1;
   centerWindow();
 
   const dlg = $("#trimmer");
@@ -35,19 +41,54 @@ function openTrim(key, m) {
     if (trim.stopAt != null && video.currentTime >= trim.stopAt) { video.pause(); trim.stopAt = null; }
     drawTrim();
   };
-  video.onloadedmetadata = () => { video.currentTime = trim.sel[0]; };
+  video.onloadedmetadata = () => { video.currentTime = segStart(); };
   dlg.showModal();
   syncTrim();
-  requestAnimationFrame(drawTrim);
+  loadSubs();
 }
 
+// ---------- subtítulos ----------
+async function loadSubs(force = false) {
+  if (!force && trim.m.edit?.subs?.length) {
+    trim.subs = trim.m.edit.subs.map((s) => ({ ...s }));
+    trim.subsEdited = true;
+  } else {
+    try {
+      trim.subs = await api(`/api/vods/${trim.key}/subs?start=${segStart()}&end=${segEnd()}`);
+    } catch (e) {
+      trim.subs = [];
+    }
+    trim.subsEdited = force;
+  }
+  renderSubs();
+}
+
+function renderSubs() {
+  const box = $(".subs-list");
+  box.innerHTML = "";
+  $(".subs-count").textContent = trim.subs.length ? `(${trim.subs.length} líneas${trim.subsEdited ? ", editados" : ""})` : "(sin transcripción)";
+  trim.subs.forEach((s, i) => {
+    const row = document.createElement("div");
+    row.className = "sub-row";
+    row.innerHTML = `<button class="ghost go" title="Ir a este momento">${fmt(s.start)}</button>
+      <input class="txt"><button class="ghost del" title="Borrar línea">✕</button>`;
+    const input = $(".txt", row);
+    input.value = s.text;
+    input.oninput = () => { s.text = input.value; trim.subsEdited = true; };
+    $(".go", row).onclick = () => { $(".trim-video").currentTime = s.start; $(".trim-video").play(); };
+    $(".del", row).onclick = () => { trim.subs.splice(i, 1); trim.subsEdited = true; renderSubs(); };
+    box.appendChild(row);
+  });
+}
+
+// ---------- ventana visible y dibujo ----------
 function centerWindow(focus = "middle") {
   const len = ZOOMS[trim.zoom];
-  const mid = focus === "start" ? trim.sel[0] : focus === "end" ? trim.sel[1] : (trim.sel[0] + trim.sel[1]) / 2;
+  const s = trim.segs[trim.active] || trim.segs[0];
+  const mid = focus === "start" ? s.start : focus === "end" ? s.end : (segStart() + segEnd()) / 2;
   let a = Math.max(0, mid - len / 2);
-  let b = Math.min(trim.dur, a + len);
-  a = Math.max(0, b - len);
-  trim.win = [a, b];
+  const b = Math.min(trim.dur, a + len);
+  trim.win = [Math.max(0, b - len), b];
 }
 
 const timeToX = (t, w) => ((t - trim.win[0]) / (trim.win[1] - trim.win[0])) * w;
@@ -62,7 +103,7 @@ function drawTrim() {
   ctx.fillStyle = "#0f1115";
   ctx.fillRect(0, 0, w, h);
 
-  // Volumen del stream en la ventana visible (segundo a segundo si hay detalle cargado)
+  const inSeg = (t) => trim.segs.find((s) => t >= s.start && t <= s.end);
   const fine = trim.fine && trim.win[0] >= trim.fine.from && trim.win[1] <= trim.fine.to;
   const values = fine ? trim.fine.values : trim.values;
   const step = fine ? 1 : trim.step;
@@ -74,39 +115,48 @@ function drawTrim() {
     if (v == null) continue;
     const t = base + i * step;
     const bh = Math.min(Math.max(v, 0) / 5, 1) * (h - 22 * devicePixelRatio);
-    const inside = t >= trim.sel[0] && t <= trim.sel[1];
-    ctx.fillStyle = inside ? "#53fc1899" : "#3a4150";
+    ctx.fillStyle = inSeg(t) ? "#53fc1899" : "#3a4150";
     ctx.fillRect((i - first) * bw, h - bh, Math.max(bw - 1, 1), bh);
   }
 
-  // Zona fuera de la selección
-  const x0 = timeToX(trim.sel[0], w), x1 = timeToX(trim.sel[1], w);
-  ctx.fillStyle = "#000000a0";
-  ctx.fillRect(0, 0, Math.max(x0, 0), h);
-  ctx.fillRect(x1, 0, w - x1, h);
+  // Oscurecer lo que no entra en ningún trozo
+  ctx.fillStyle = "#000000a8";
+  let prev = trim.win[0];
+  for (const s of trim.segs) {
+    if (s.start > prev) ctx.fillRect(timeToX(prev, w), 0, timeToX(s.start, w) - timeToX(prev, w), h);
+    prev = Math.max(prev, s.end);
+  }
+  if (prev < trim.win[1]) ctx.fillRect(timeToX(prev, w), 0, w - timeToX(prev, w), h);
 
   // Marcas de tiempo
   ctx.fillStyle = "#8b93a3";
   ctx.font = `${11 * devicePixelRatio}px system-ui`;
   const span = trim.win[1] - trim.win[0];
-  const stepMarks = span <= 45 ? 5 : span <= 180 ? 15 : span <= 600 ? 60 : span <= 1800 ? 300 : 900;
-  for (let t = Math.ceil(trim.win[0] / stepMarks) * stepMarks; t < trim.win[1]; t += stepMarks) {
+  const marks = span <= 45 ? 5 : span <= 180 ? 15 : span <= 600 ? 60 : span <= 1800 ? 300 : 900;
+  for (let t = Math.ceil(trim.win[0] / marks) * marks; t < trim.win[1]; t += marks) {
     const x = timeToX(t, w);
     ctx.fillRect(x, h - 14 * devicePixelRatio, 1, 6 * devicePixelRatio);
     ctx.fillText(fmt(t), x + 3 * devicePixelRatio, h - 3 * devicePixelRatio);
   }
 
-  // Bordes de la selección
-  for (const [x, label] of [[x0, "inicio"], [x1, "fin"]]) {
-    ctx.fillStyle = "#53fc18";
-    ctx.fillRect(x - 2 * devicePixelRatio, 0, 4 * devicePixelRatio, h);
-    ctx.fillRect(x - 7 * devicePixelRatio, h / 2 - 16 * devicePixelRatio, 14 * devicePixelRatio, 32 * devicePixelRatio);
-    ctx.fillStyle = "#0b1a04";
-    ctx.font = `bold ${10 * devicePixelRatio}px system-ui`;
-    ctx.fillText(label === "inicio" ? "▌" : "▐", x - 3 * devicePixelRatio, h / 2 + 4 * devicePixelRatio);
-  }
+  // Trozos: bordes, número y velocidad
+  trim.segs.forEach((s, i) => {
+    const x0 = timeToX(s.start, w), x1 = timeToX(s.end, w);
+    const activo = i === trim.active;
+    ctx.fillStyle = activo ? "#53fc18" : "#53fc1870";
+    ctx.fillRect(x0 - 2 * devicePixelRatio, 0, 4 * devicePixelRatio, h);
+    ctx.fillRect(x1 - 2 * devicePixelRatio, 0, 4 * devicePixelRatio, h);
+    if (activo) {
+      for (const x of [x0, x1]) ctx.fillRect(x - 7 * devicePixelRatio, h / 2 - 16 * devicePixelRatio, 14 * devicePixelRatio, 32 * devicePixelRatio);
+    }
+    if (x1 - x0 > 30 * devicePixelRatio) {
+      ctx.fillStyle = activo ? "#fff" : "#ffffff99";
+      ctx.font = `bold ${11 * devicePixelRatio}px system-ui`;
+      const label = `${i + 1}${s.speed !== 1 ? ` · ${String(s.speed).replace(".", ",")}x` : ""}`;
+      ctx.fillText(label, x0 + 8 * devicePixelRatio, 16 * devicePixelRatio);
+    }
+  });
 
-  // Reproducción
   const video = $(".trim-video");
   if (video && !isNaN(video.currentTime)) {
     const x = timeToX(video.currentTime, w);
@@ -117,7 +167,6 @@ function drawTrim() {
   }
 }
 
-// Con mucho zoom se pide el volumen segundo a segundo del tramo visible
 async function loadFine() {
   const span = trim.win[1] - trim.win[0];
   if (span > 240) return;
@@ -128,26 +177,36 @@ async function loadFine() {
     if (!r.values.length) return;
     trim.fine = { from: r.start, to: r.start + r.values.length, values: r.values };
     drawTrim();
-  } catch (e) { /* si falla, se sigue viendo la versión de 5 en 5 segundos */ }
+  } catch (e) { /* si falla, se sigue viendo el volumen de 5 en 5 segundos */ }
 }
 
 function syncTrim() {
-  $(".t-start").value = fmt(trim.sel[0]);
-  $(".t-end").value = fmt(trim.sel[1]);
-  $(".sel-info").textContent = `${(trim.sel[1] - trim.sel[0]).toFixed(1)} s de clip`;
+  const s = trim.segs[trim.active];
+  $(".t-start").value = fmt(s.start);
+  $(".t-end").value = fmt(s.end);
+  const bruto = segEnd() - segStart();
+  $(".sel-info").textContent = `trozo ${trim.active + 1} de ${trim.segs.length}: ${(s.end - s.start).toFixed(1)} s`;
+  $(".out-dur").textContent = `Clip final: ${outDur().toFixed(1)} s${outDur() < bruto - 0.5 ? ` (de ${bruto.toFixed(0)} s)` : ""}`;
   const span = ZOOMS[trim.zoom];
   $(".zoom-label").textContent = span >= 3600 ? "vista: todo el stream" : `vista: ${span >= 60 ? `${Math.round(span / 60)} min` : `${span} s`}`;
   $(".zoom-in").disabled = trim.zoom === 0;
   $(".zoom-out").disabled = trim.zoom === ZOOMS.length - 1;
+  $(".drop").disabled = trim.segs.length < 2;
+  document.querySelectorAll("#trimmer .sp").forEach((b) => b.classList.toggle("on", +b.dataset.s === s.speed));
   drawTrim();
   loadFine();
 }
 
-function setSel(start, end, keepInView = true) {
-  const min = 1;
-  const moved = start !== trim.sel[0] ? "start" : "end";
-  trim.sel = [Math.max(0, Math.min(start, trim.dur - min)), Math.min(trim.dur, Math.max(end, start + min))];
-  const edge = moved === "start" ? trim.sel[0] : trim.sel[1];
+function setSeg(start, end, keepInView = true) {
+  const s = trim.segs[trim.active];
+  const prev = trim.segs[trim.active - 1], next = trim.segs[trim.active + 1];
+  const min = 0.5;
+  start = Math.max(prev ? prev.end : 0, Math.min(start, end - min));
+  end = Math.min(next ? next.start : trim.dur, Math.max(end, start + min));
+  const moved = start !== s.start ? "start" : "end";
+  s.start = start;
+  s.end = end;
+  const edge = moved === "start" ? s.start : s.end;
   if (keepInView && (edge < trim.win[0] || edge > trim.win[1])) centerWindow(moved);
   syncTrim();
 }
@@ -158,28 +217,33 @@ function initTrimCanvas() {
   const near = (x, t) => Math.abs(x - timeToX(t, canvas.clientWidth)) < 10;
 
   canvas.onpointerdown = (e) => {
-    const x = e.offsetX;
-    if (near(x, trim.sel[0])) trim.drag = "start";
-    else if (near(x, trim.sel[1])) trim.drag = "end";
-    else if (x > timeToX(trim.sel[0], canvas.clientWidth) && x < timeToX(trim.sel[1], canvas.clientWidth)) {
-      trim.drag = { move: xToTime(x, canvas.clientWidth), sel: [...trim.sel] };
-    } else {
-      $(".trim-video").currentTime = xToTime(x, canvas.clientWidth);
+    const x = e.offsetX, t = xToTime(x, canvas.clientWidth);
+    const hit = trim.segs.findIndex((s) => near(x, s.start) || near(x, s.end) || (t > s.start && t < s.end));
+    if (hit < 0) {
+      $(".trim-video").currentTime = t;
       return;
     }
-    canvas.setPointerCapture(e.pointerId);
+    trim.active = hit;
+    const s = trim.segs[hit];
+    if (near(x, s.start)) trim.drag = "start";
+    else if (near(x, s.end)) trim.drag = "end";
+    else trim.drag = { move: t, seg: { ...s } };
+    canvas.setPointerCapture?.(e.pointerId);
+    syncTrim();
   };
   canvas.onpointermove = (e) => {
     const t = xToTime(e.offsetX, canvas.clientWidth);
     if (!trim.drag) {
-      canvas.style.cursor = near(e.offsetX, trim.sel[0]) || near(e.offsetX, trim.sel[1]) ? "ew-resize" : "pointer";
+      const over = trim.segs.some((s) => near(e.offsetX, s.start) || near(e.offsetX, s.end));
+      canvas.style.cursor = over ? "ew-resize" : "pointer";
       return;
     }
-    if (trim.drag === "start") setSel(Math.min(t, trim.sel[1] - 1), trim.sel[1], false);
-    else if (trim.drag === "end") setSel(trim.sel[0], Math.max(t, trim.sel[0] + 1), false);
+    const s = trim.segs[trim.active];
+    if (trim.drag === "start") setSeg(t, s.end, false);
+    else if (trim.drag === "end") setSeg(s.start, t, false);
     else {
       const d = t - trim.drag.move;
-      setSel(trim.drag.sel[0] + d, trim.drag.sel[1] + d, false);
+      setSeg(trim.drag.seg.start + d, trim.drag.seg.end + d, false);
     }
   };
   canvas.onpointerup = () => { trim.drag = null; };
@@ -188,21 +252,20 @@ function initTrimCanvas() {
     const before = xToTime(e.offsetX, canvas.clientWidth);
     trim.zoom = Math.max(0, Math.min(trim.zoom + (e.deltaY > 0 ? 1 : -1), ZOOMS.length - 1));
     const len = ZOOMS[trim.zoom];
-    const frac = e.offsetX / canvas.clientWidth;
-    let a = Math.max(0, before - len * frac);
-    trim.win = [Math.max(0, Math.min(a, trim.dur - len)), 0];
-    trim.win[1] = Math.min(trim.dur, trim.win[0] + len);
+    const a = Math.max(0, Math.min(before - len * (e.offsetX / canvas.clientWidth), trim.dur - len));
+    trim.win = [a, Math.min(trim.dur, a + len)];
     syncTrim();
   };
 }
 
-// ---------- botones ----------
+// ---------- herramientas y botones ----------
 function initTrimControls() {
   const dlg = $("#trimmer");
   const video = $(".trim-video", dlg);
   const nudge = (which, d) => () => {
-    if (which === "start") setSel(trim.sel[0] + d, trim.sel[1]);
-    else setSel(trim.sel[0], trim.sel[1] + d);
+    const s = trim.segs[trim.active];
+    if (which === "start") setSeg(s.start + d, s.end);
+    else setSeg(s.start, s.end + d);
   };
   $(".s2-", dlg).onclick = nudge("start", -2);
   $(".s05-", dlg).onclick = nudge("start", -0.5);
@@ -212,19 +275,57 @@ function initTrimControls() {
   $(".e05-", dlg).onclick = nudge("end", -0.5);
   $(".e05\\+", dlg).onclick = nudge("end", 0.5);
   $(".e2\\+", dlg).onclick = nudge("end", 2);
-  $(".s-now", dlg).onclick = () => setSel(video.currentTime, trim.sel[1]);
-  $(".e-now", dlg).onclick = () => setSel(trim.sel[0], video.currentTime);
-  $(".t-start", dlg).onchange = (e) => setSel(parse(e.target.value), trim.sel[1]);
-  $(".t-end", dlg).onchange = (e) => setSel(trim.sel[0], parse(e.target.value));
+  $(".s-now", dlg).onclick = () => setSeg(video.currentTime, trim.segs[trim.active].end);
+  $(".e-now", dlg).onclick = () => setSeg(trim.segs[trim.active].start, video.currentTime);
+  $(".t-start", dlg).onchange = (e) => setSeg(parse(e.target.value), trim.segs[trim.active].end);
+  $(".t-end", dlg).onchange = (e) => setSeg(trim.segs[trim.active].start, parse(e.target.value));
   $(".zoom-in", dlg).onclick = () => { trim.zoom = Math.max(0, trim.zoom - 1); centerWindow(); syncTrim(); };
   $(".zoom-out", dlg).onclick = () => { trim.zoom = Math.min(ZOOMS.length - 1, trim.zoom + 1); centerWindow(); syncTrim(); };
   $(".go-start", dlg).onclick = () => { centerWindow("start"); syncTrim(); };
   $(".go-end", dlg).onclick = () => { centerWindow("end"); syncTrim(); };
+
+  // Herramienta de corte: parte el trozo en dos por donde va la reproducción
+  $(".split", dlg).onclick = () => {
+    const t = video.currentTime;
+    const i = trim.segs.findIndex((s) => t > s.start + 0.5 && t < s.end - 0.5);
+    if (i < 0) return alert("Poné la reproducción dentro de un trozo para dividirlo.");
+    const s = trim.segs[i];
+    trim.segs.splice(i, 1, { ...s, end: t }, { ...s, start: t });
+    trim.active = i + 1;
+    syncTrim();
+  };
+  $(".drop", dlg).onclick = () => {
+    if (trim.segs.length < 2) return;
+    trim.segs.splice(trim.active, 1);
+    trim.active = Math.max(0, trim.active - 1);
+    syncTrim();
+  };
+  // Herramienta de cámara rápida
+  document.querySelectorAll("#trimmer .sp").forEach((b) => {
+    b.onclick = () => { trim.segs[trim.active].speed = +b.dataset.s; syncTrim(); };
+  });
+  $(".reset-edit", dlg).onclick = () => {
+    trim.segs = [{ start: segStart(), end: segEnd(), speed: 1 }];
+    trim.active = 0;
+    syncTrim();
+  };
+
   $(".play-sel", dlg).onclick = () => {
-    video.currentTime = trim.sel[0];
-    trim.stopAt = trim.sel[1];
+    const s = trim.segs[trim.active];
+    video.currentTime = s.start;
+    video.playbackRate = s.speed;
+    trim.stopAt = s.end;
     video.play();
   };
+  $(".subs-add", dlg).onclick = () => {
+    const t = video.currentTime;
+    trim.subs.push({ start: t, end: t + 2, text: "" });
+    trim.subs.sort((a, b) => a.start - b.start);
+    trim.subsEdited = true;
+    renderSubs();
+  };
+  $(".subs-reset", dlg).onclick = () => loadSubs(true);
+
   const close = () => {
     video.pause();
     trim.hls?.destroy();
@@ -235,9 +336,15 @@ function initTrimControls() {
   $(".cancel", dlg).onclick = close;
   $(".save", dlg).onclick = async () => {
     const { key, m } = trim;
-    await api(`/api/vods/${key}/moments/${m.id}`, {
-      method: "PATCH", body: JSON.stringify({ start: trim.sel[0], end: trim.sel[1] }),
-    });
+    const montado = trim.segs.length > 1 || trim.segs[0].speed !== 1;
+    const body = {
+      start: segStart(), end: segEnd(),
+      edit: {
+        cuts: montado ? trim.segs.map((s) => ({ start: +s.start.toFixed(2), end: +s.end.toFixed(2), speed: s.speed })) : [],
+        subs: trim.subsEdited ? trim.subs.filter((s) => (s.text || "").trim()) : [],
+      },
+    };
+    await api(`/api/vods/${key}/moments/${m.id}`, { method: "PATCH", body: JSON.stringify(body) });
     await api(`/api/vods/${key}/moments/${m.id}/cut`, { method: "POST" });
     close();
     refreshDetail();

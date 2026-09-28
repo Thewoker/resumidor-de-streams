@@ -16,9 +16,44 @@ Busca momentos que funcionen como clip corto por sí solos:
 Ignora silencios, explicaciones aburridas, leer la configuración, esperas en menús.
 Sé exigente: la mayoría de fragmentos no tienen nada bueno. Si no hay nada, devuelve lista vacía.
 
+MONTAJE: además de elegir el momento, móntalo para que se haga corto y entretenido, con dos herramientas:
+- CORTE: quedarte solo con los trozos buenos y tirar el resto (silencios, repeticiones, gente esperando, explicaciones largas).
+- CÁMARA RÁPIDA: acelerar los trozos necesarios pero aburridos (caminar, buscar objetos, recargar, menús) para no perder el hilo.
+
+Reglas del montaje:
+- Devuelve el montaje en "cortes": trozos en orden, sin solaparse, dentro de inicio y fin.
+- "velocidad": 1 para lo que se oye y tiene gracia, 1.5 o 2 para relleno, 3 solo para tramos largos sin nada.
+- El remate (el grito, la risa, la frase graciosa, la muerte) SIEMPRE a velocidad 1 y con un par de segundos de aire después.
+- Apunta a 20-45 segundos de clip final. Si el momento bruto dura más de un minuto, recórtalo de verdad.
+- Si el momento ya es corto y va seguido, deja "cortes" vacío.
+
 Responde SOLO con JSON:
-{"momentos": [{"inicio": <segundo>, "fin": <segundo>, "nota": <1-10>, "titulo": "<título corto y llamativo>", "motivo": "<por qué>"}]}
+{"momentos": [{"inicio": <segundo>, "fin": <segundo>, "nota": <1-10>, "titulo": "<título corto y llamativo>", "motivo": "<por qué>",
+  "cortes": [{"inicio": <segundo>, "fin": <segundo>, "velocidad": 1}]}]}
 Cada momento debe durar entre 10 y 75 segundos e incluir el contexto necesario para entenderse."""
+
+
+def _cuts(raw, start, end):
+    """Valida el montaje propuesto por la IA: trozos dentro del momento, en orden y sin solapes."""
+    cuts = []
+    for c in raw or []:
+        try:
+            a, b = float(c["inicio"]), float(c["fin"])
+            speed = float(c.get("velocidad") or 1)
+        except (KeyError, TypeError, ValueError):
+            continue
+        a, b = max(a, start), min(b, end)
+        if b - a < 1:
+            continue
+        if cuts and a < cuts[-1]["end"]:
+            a = cuts[-1]["end"]
+            if b - a < 1:
+                continue
+        cuts.append({"start": round(a, 2), "end": round(b, 2), "speed": min(max(speed, 1), 4)})
+    # Un único trozo a velocidad normal es lo mismo que no montar nada
+    if len(cuts) == 1 and cuts[0]["speed"] == 1:
+        return []
+    return cuts
 
 
 def unload(url, model):
@@ -86,6 +121,7 @@ def find_moments(transcript, audio_peaks, workdir: Path, url, model, on_progress
             moments.append({
                 "start": start, "end": end, "llm": max(1.0, min(nota, 10.0)),
                 "title": str(m.get("titulo", "")).strip() or "Momento", "reason": str(m.get("motivo", "")).strip(),
+                "edit": {"cuts": _cuts(m.get("cortes"), start, end)},
             })
         print(f"  ventana {n}/{len(windows)}: {len(data.get('momentos', []))} momentos")
 
