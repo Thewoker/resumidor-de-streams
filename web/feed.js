@@ -1,7 +1,24 @@
 // Modo scroll: revisar clips uno detrás de otro como shorts y aprobar/descartar.
+const SPEEDS = [1, 1.25, 1.5, 2, 2.5, 3];
+
 const feed = {
   items: [], idx: 0, key: null, status: "pending", history: [], decided: {}, observer: null,
+  rate: Number(localStorage.getItem("feedRate")) || 1,
 };
+
+function setRate(rate) {
+  feed.rate = Math.max(0.5, Math.min(rate, 4));
+  document.querySelectorAll("#feed video").forEach((v) => { v.playbackRate = feed.rate; });
+  const label = $(".feed-rate");
+  label.hidden = feed.rate === 1;
+  label.textContent = `⏩ ${String(feed.rate).replace(".", ",")}x`;
+  try { localStorage.setItem("feedRate", feed.rate); } catch (e) { /* modo incógnito */ }
+}
+
+function stepRate(dir) {
+  const i = SPEEDS.findIndex((s) => s >= feed.rate - 0.001);
+  setRate(SPEEDS[Math.max(0, Math.min((i < 0 ? 0 : i) + dir, SPEEDS.length - 1))]);
+}
 
 async function openFeed(key = null, status = "pending") {
   try {
@@ -26,6 +43,7 @@ async function startFeed(key, status = "pending") {
   document.body.style.overflow = "hidden";
   $(".feed-undo").disabled = true;
   renderFeed();
+  setRate(feed.rate);
 }
 
 function closeFeed() {
@@ -137,6 +155,7 @@ function activate(i) {
       // Liberar los vídeos lejanos para no cargar 15 clips a la vez
       v.pause(); v.removeAttribute("src"); v.load();
     }
+    v.playbackRate = feed.rate;
     if (j === i) {
       v.currentTime = 0;
       v.play().then(() => s.classList.remove("paused")).catch(() => s.classList.add("paused"));
@@ -277,4 +296,8 @@ document.addEventListener("keydown", (e) => {
     const s = document.querySelector(`#feed .slide[data-i="${feed.idx}"]`);
     if (s && $("video", s)) togglePlay(s);
   } else if (k === "z" || k === "Z") undo();
+  else if (k >= "1" && k <= String(SPEEDS.length)) setRate(SPEEDS[Number(k) - 1]);
+  else if (k === "0") setRate(1);
+  else if (k === "+" || k === "=") stepRate(1);
+  else if (k === "-" || k === "_") stepRate(-1);
 });
