@@ -21,6 +21,9 @@ MONTAJE: además de elegir el momento, móntalo para que se haga corto y entrete
 - CÁMARA RÁPIDA: acelerar los trozos necesarios pero aburridos (caminar, buscar objetos, recargar, menús) para no perder el hilo.
 
 Reglas del montaje:
+- CONTINUIDAD ANTE TODO: el clip es UNA sola escena seguida. Los cortes solo quitan pausas, repeticiones o
+  relleno DENTRO de esa escena. Nunca pegues partes lejanas del stream (más de ~15 s de salto): queda incoherente.
+- Si lo bueno está en dos sitios alejados, elige uno solo. Vale más un clip corto que se entienda que uno largo a saltos.
 - Devuelve el montaje en "cortes": trozos en orden, sin solaparse, dentro de inicio y fin.
 - "velocidad": 1 para lo que se oye y tiene gracia, 1.5 o 2 para relleno, 3 solo para tramos largos sin nada.
 - El remate (el grito, la risa, la frase graciosa, la muerte) SIEMPRE a velocidad 1 y con un par de segundos de aire después.
@@ -51,6 +54,18 @@ def _cuts(raw, start, end):
             if b - a < 1:
                 continue
         cuts.append({"start": round(a, 2), "end": round(b, 2), "speed": min(max(speed, 1), 4)})
+
+    # Continuidad: si la IA pega trozos lejanos, nos quedamos con el bloque más largo y seguido
+    groups, current = [], []
+    for c in cuts:
+        if current and c["start"] - current[-1]["end"] > 15:
+            groups.append(current)
+            current = []
+        current.append(c)
+    if current:
+        groups.append(current)
+    cuts = max(groups, key=lambda g: sum(x["end"] - x["start"] for x in g)) if groups else []
+
     # Un único trozo a velocidad normal es lo mismo que no montar nada
     if len(cuts) == 1 and cuts[0]["speed"] == 1:
         return []
@@ -119,10 +134,13 @@ def find_moments(transcript, audio_peaks, workdir: Path, url, model, on_progress
             if end - start < 8:
                 end = start + 15
             end = min(end, start + 90)
+            cuts = _cuts(m.get("cortes"), start, end)
+            if cuts:  # el momento pasa a ser el tramo que realmente se usa
+                start, end = cuts[0]["start"], cuts[-1]["end"]
             moments.append({
                 "start": start, "end": end, "llm": max(1.0, min(nota, 10.0)),
                 "title": str(m.get("titulo", "")).strip() or "Momento", "reason": str(m.get("motivo", "")).strip(),
-                "edit": {"cuts": _cuts(m.get("cortes"), start, end)},
+                "edit": {"cuts": cuts},
             })
         print(f"  ventana {n}/{len(windows)}: {len(data.get('momentos', []))} momentos")
 

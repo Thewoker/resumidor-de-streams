@@ -93,6 +93,23 @@ def _build(blocks, threshold, bridge=10.0, bridge_speed=2.0, pad=1.5, min_keep=3
         else:
             padded.append({"start": start, "end": end})
 
+    # Continuidad: un clip es UNA escena. Si dos partes buenas están lejos, no se pegan:
+    # se elige la mejor zona y el resto se descarta.
+    clusters, current = [], []
+    for k in padded:
+        if current and k["start"] - current[-1]["end"] > bridge:
+            clusters.append(current)
+            current = []
+        current.append(k)
+    if current:
+        clusters.append(current)
+
+    def weight(cluster):
+        a, b = cluster[0]["start"], cluster[-1]["end"]
+        return sum(x["score"] * (x["end"] - x["start"]) for x in blocks if x["start"] >= a and x["end"] <= b)
+
+    padded = max(clusters, key=weight) if clusters else []
+
     segs = []
     for i, k in enumerate(padded):
         gap = k["start"] - padded[i - 1]["end"] if i else 0

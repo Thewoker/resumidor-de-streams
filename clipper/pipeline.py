@@ -155,6 +155,7 @@ def cut_moment(workdir: Path, m, video, transcript, s):
             m["edit"] = {**(m.get("edit") or {}), "cuts": [
                 {"start": round(x["start"], 2), "end": round(x["end"], 2), "speed": x["speed"]} for x in segs]}
             m["auto_edit"] = True
+            m["start"], m["end"] = segs[0]["start"], segs[-1]["end"]
     for old in (m.get("file"), m.get("vertical")):
         if old:
             (clips / old).unlink(missing_ok=True)
@@ -266,6 +267,7 @@ def process(source, s, key, title="", meta=None):
                 m["edit"] = {**(m.get("edit") or {}), "cuts": [
                     {"start": round(x["start"], 2), "end": round(x["end"], 2), "speed": x["speed"]} for x in segs]}
                 m["auto_edit"] = True
+                m["start"], m["end"] = segs[0]["start"], segs[-1]["end"]
             m["out_duration"] = round(edit.out_duration(segs), 2)
             moments.append(m)
         write_json(workdir / "moments.json", moments)
