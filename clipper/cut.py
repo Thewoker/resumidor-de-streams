@@ -60,6 +60,20 @@ def _input(video):
     return str(p.resolve()) if p.exists() else str(video)
 
 
+def _run(args, cpu=False, cwd=None):
+    """Lanza ffmpeg contando qué falló; si NVENC no puede, reintenta por CPU."""
+    proc = subprocess.run(args, capture_output=True, text=True, cwd=cwd)
+    if proc.returncode == 0:
+        return
+    err = (proc.stderr or "").strip()
+    if not cpu and ("nvenc" in err.lower() or "cuda" in err.lower()):
+        print(f"  NVENC falló ({err.splitlines()[-1][:120] if err else '?'}), se reintenta por CPU")
+        _run([a if a != "h264_nvenc" else "libx264" for a in args if a not in ("-preset", "p5", "-cq", "21")],
+             cpu=True, cwd=cwd)
+        return
+    raise RuntimeError(f"ffmpeg falló: {err[-600:] or 'sin detalle'}")
+
+
 def _atempo(speed):
     """atempo solo admite 0.5-2, así que las velocidades altas se encadenan."""
     filters, left = [], speed
@@ -80,7 +94,7 @@ def horizontal(video, start, end, out: Path, cpu=False, speed=1.0):
     if abs(speed - 1) > 0.01:
         args += ["-filter_complex", f"[0:v]setpts=PTS/{speed:.4f}[v];[0:a]{_atempo(speed)}[a]", "-map", "[v]", "-map", "[a]"]
     args += [*_encoder(cpu), "-c:a", "aac", "-b:a", "160k", "-r", "60", str(out)]
-    subprocess.run(args, check=True)
+    _run(args, cpu)
 
 
 def montage(video, segs, out: Path, cpu=False):
@@ -99,10 +113,10 @@ def montage(video, segs, out: Path, cpu=False):
             parts.append(part)
         listing = tmp / "list.txt"
         listing.write_text("".join(f"file '{p.name}'\n" for p in parts), encoding="utf-8")
-        subprocess.run(
+        _run(
             ["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", listing.name,
              "-c", "copy", str(out.resolve())],
-            check=True, cwd=tmp,
+            cpu=True, cwd=tmp,
         )
     finally:
         for p in tmp.glob("*"):
@@ -111,19 +125,23 @@ def montage(video, segs, out: Path, cpu=False):
     return out
 
 
-def vertical(video, start, end, out: Path, srt_name: str, cpu=False):
+def vertical(video, start, end, out: Path, srt_name=None, cpu=False):
     """9:16 con el juego centrado sobre fondo desenfocado y subtítulos quemados."""
-    style = "Fontname=Arial,Fontsize=13,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Outline=2,Alignment=2,MarginV=70"
+    style = ("Fontname=DejaVu Sans,Fontsize=13,Bold=1,PrimaryColour=&H00FFFFFF,"
+             "OutlineColour=&H00000000,Outline=2,Alignment=2,MarginV=70")
+    # Sin subtítulos (o con un .srt vacío) el filtro se deja fuera: si no, ffmpeg falla
+    srt = out.parent / srt_name if srt_name else None
+    subs = f",subtitles={srt_name}:force_style='{style}'" if srt and srt.exists() and srt.stat().st_size > 10 else ""
     graph = (
         "[0:v]split[a][b];"
         "[a]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:5[bg];"
         "[b]scale=1080:-2[fg];"
-        f"[bg][fg]overlay=(W-w)/2:(H-h)/2,subtitles={srt_name}:force_style='{style}'[v]"
+        f"[bg][fg]overlay=(W-w)/2:(H-h)/2{subs}[v]"
     )
     # cwd = carpeta del clip para pasar el .srt sin rutas de Windows (los ':' rompen el filtro)
-    subprocess.run(
+    _run(
         ["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.2f}", "-i", _input(video), "-t", f"{end - start:.2f}",
          "-filter_complex", graph, "-map", "[v]", "-map", "0:a?", *_encoder(cpu), "-c:a", "aac", "-b:a", "160k",
          out.name],
-        check=True, cwd=out.parent,
+        cpu, cwd=out.parent,
     )
