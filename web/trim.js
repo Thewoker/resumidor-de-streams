@@ -40,12 +40,39 @@ async function openTrim(key, m) {
   }
   video.ontimeupdate = () => {
     if (trim.stopAt != null && video.currentTime >= trim.stopAt) { video.pause(); trim.stopAt = null; }
+    showSubPreview(video.currentTime);
     drawTrim();
   };
   video.onloadedmetadata = () => { video.currentTime = segStart(); };
   dlg.showModal();
   syncTrim();
   loadSubs();
+}
+
+// ---------- vista horizontal / vertical ----------
+function setView(vertical) {
+  const frame = $(".trim-frame");
+  frame.classList.toggle("vertical", vertical);
+  $(".view-v").classList.toggle("on", vertical);
+  $(".view-h").classList.toggle("on", !vertical);
+  const video = $(".trim-video"), bg = $(".trim-bg");
+  if (vertical) {
+    // El fondo desenfocado es el mismo vídeo, clonado en directo (como hace ffmpeg al montar el 9:16)
+    try {
+      if (!bg.srcObject && video.captureStream) {
+        bg.srcObject = video.captureStream();
+        bg.play().catch(() => {});
+      }
+    } catch (e) { /* si el navegador no deja clonarlo, queda el fondo oscuro */ }
+  }
+  showSubPreview(video.currentTime);
+}
+
+function showSubPreview(t) {
+  const box = $(".sub-preview");
+  if (!box) return;
+  const s = trim.subs.find((x) => t >= x.start && t <= x.end);
+  box.textContent = s ? s.text : "";
 }
 
 // ---------- subtítulos ----------
@@ -285,6 +312,8 @@ function initTrimControls() {
   $(".t-end", dlg).onchange = (e) => setSeg(trim.segs[trim.active].start, parse(e.target.value));
   $(".zoom-in", dlg).onclick = () => { trim.zoom = Math.max(0, trim.zoom - 1); centerWindow(); syncTrim(); };
   $(".zoom-out", dlg).onclick = () => { trim.zoom = Math.min(ZOOMS.length - 1, trim.zoom + 1); centerWindow(); syncTrim(); };
+  $(".view-h", dlg).onclick = () => setView(false);
+  $(".view-v", dlg).onclick = () => setView(true);
   $(".go-start", dlg).onclick = () => { centerWindow("start"); syncTrim(); };
   $(".go-end", dlg).onclick = () => { centerWindow("end"); syncTrim(); };
 
@@ -332,6 +361,9 @@ function initTrimControls() {
 
   const close = () => {
     video.pause();
+    const bg = $(".trim-bg", dlg);
+    bg.pause();
+    bg.srcObject = null;
     trim.hls?.destroy();
     trim.hls = null;
     dlg.close();

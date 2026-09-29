@@ -114,7 +114,18 @@
     <span class="muted trim-sub">Cortá, acelerá los trozos aburridos y corregí los subtítulos</span>
     <button class="ghost trim-close">✕</button>
   </div>
-  <video class="trim-video" controls playsinline></video>
+  <div class="trim-stage">
+    <div class="trim-frame">
+      <video class="trim-bg" muted playsinline></video>
+      <video class="trim-video" controls playsinline></video>
+      <div class="sub-preview"></div>
+    </div>
+  </div>
+  <div class="view-switch">
+    <button class="ghost view-h on">🖥 Horizontal</button>
+    <button class="ghost view-v">📱 Vertical 9:16</button>
+    <span class="muted">Así se verá el clip vertical, con los subtítulos</span>
+  </div>
   <div class="trim-bar">
     <button class="ghost zoom-out" title="Alejar">🔍−</button>
     <span class="zoom-label muted"></span>
