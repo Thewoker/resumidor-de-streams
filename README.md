@@ -28,6 +28,10 @@ Cada momento guarda un plan de edición en `moments.json`:
 
 Lo genera la IA al analizar el stream y se puede retocar en la interfaz con **✂ Ajustar corte**.
 
+**Límite de duración:** ningún clip pasa de `MAX_CLIP_SECONDS` (60 s por defecto). Si el montaje de la IA se pasa,
+el programa lo rehace solo: conserva los picos de audio con algo de aire, acelera los huecos cortos y tira los largos.
+Un montaje hecho a mano (`manual_edit`) manda sobre el límite.
+
 ## Requisitos
 
 - Python 3.10+, ffmpeg con NVENC, GPU NVIDIA (probado para RTX 3070, 8 GB)
@@ -68,6 +72,7 @@ Build pack Dockerfile, puerto 8000, volumen persistente en `/data`, y `--gpus al
 | `OUTPUT_DIR` | `output` (`/data/output` en Docker) |
 | `TOP_CLIPS` | `15` |
 | `MIN_SCORE` | `6` |
+| `MAX_CLIP_SECONDS` | `60` |
 | `AUTO_PROCESS` | `1` |
 | `CHECK_INTERVAL` | `600` |
 | `SKIP_TITLES` | (vacío, p. ej. `meteoro`) |

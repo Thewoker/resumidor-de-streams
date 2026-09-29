@@ -128,10 +128,33 @@ def clean_temp(workdir: Path):
     return freed
 
 
+_z_cache = {}
+
+
+def excitement_of(workdir: Path):
+    """Curva de intensidad del stream (para montar solo los clips largos)."""
+    path = workdir / "loudness.npy"
+    if not path.exists():
+        return None
+    key = (str(path), path.stat().st_mtime)
+    if key not in _z_cache:
+        import numpy as np
+        _z_cache.clear()
+        _z_cache[key] = audio.excitement(np.load(path))
+    return _z_cache[key]
+
+
 def cut_moment(workdir: Path, m, video, transcript, s):
     """Corta (o recorta de nuevo) un momento. `video` puede ser archivo local o la URL .m3u8."""
     clips = workdir / "clips"
     clips.mkdir(exist_ok=True)
+    # Salvo que lo haya montado el usuario a mano, se respeta el máximo de duración
+    if not m.get("manual_edit") and edit.out_duration(edit.segments(m)) > s.max_clip:
+        segs, edited = edit.autofit(edit.segments(m), excitement_of(workdir), s.max_clip)
+        if edited:
+            m["edit"] = {**(m.get("edit") or {}), "cuts": [
+                {"start": round(x["start"], 2), "end": round(x["end"], 2), "speed": x["speed"]} for x in segs]}
+            m["auto_edit"] = True
     for old in (m.get("file"), m.get("vertical")):
         if old:
             (clips / old).unlink(missing_ok=True)
@@ -234,8 +257,17 @@ def process(source, s, key, title="", meta=None):
         )
         llm.unload(s.ollama, s.model)
         ranked = scoring.rank(found, peaks, z, total, top=200, min_llm=s.min_score)
-        moments = [{**m, "id": i, "status": "pending", "file": None, "vertical": None}
-                   for i, m in enumerate(ranked, 1)]
+        moments = []
+        for i, m in enumerate(ranked, 1):
+            # Regla dura: ningún clip pasa del máximo. Si pasa, se monta solo (corte + cámara rápida)
+            segs, edited = edit.autofit(edit.segments(m), z, s.max_clip)
+            m = {**m, "id": i, "status": "pending", "file": None, "vertical": None}
+            if edited:
+                m["edit"] = {**(m.get("edit") or {}), "cuts": [
+                    {"start": round(x["start"], 2), "end": round(x["end"], 2), "speed": x["speed"]} for x in segs]}
+                m["auto_edit"] = True
+            m["out_duration"] = round(edit.out_duration(segs), 2)
+            moments.append(m)
         write_json(workdir / "moments.json", moments)
         p.done(f"{len(found)} candidatos → {len(moments)} momentos buenos")
 

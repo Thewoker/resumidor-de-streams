@@ -1,5 +1,6 @@
 // Editor de clips: recorte con zoom, montaje por trozos con velocidad y subtítulos editables.
 const ZOOMS = [20, 45, 90, 180, 600, 1800, 7200];
+const MAX_CLIP = 60;
 
 const trim = {
   key: null, m: null, dur: 0, values: [], step: 5, fine: null,
@@ -186,7 +187,10 @@ function syncTrim() {
   $(".t-end").value = fmt(s.end);
   const bruto = segEnd() - segStart();
   $(".sel-info").textContent = `trozo ${trim.active + 1} de ${trim.segs.length}: ${(s.end - s.start).toFixed(1)} s`;
-  $(".out-dur").textContent = `Clip final: ${outDur().toFixed(1)} s${outDur() < bruto - 0.5 ? ` (de ${bruto.toFixed(0)} s)` : ""}`;
+  const largo = outDur() > MAX_CLIP;
+  $(".out-dur").textContent = `Clip final: ${outDur().toFixed(1)} s${outDur() < bruto - 0.5 ? ` (de ${bruto.toFixed(0)} s)` : ""}`
+    + (largo ? ` ⚠ pasa de ${MAX_CLIP} s` : "");
+  $(".out-dur").classList.toggle("too-long", largo);
   const span = ZOOMS[trim.zoom];
   $(".zoom-label").textContent = span >= 3600 ? "vista: todo el stream" : `vista: ${span >= 60 ? `${Math.round(span / 60)} min` : `${span} s`}`;
   $(".zoom-in").disabled = trim.zoom === 0;

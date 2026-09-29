@@ -24,7 +24,8 @@ Reglas del montaje:
 - Devuelve el montaje en "cortes": trozos en orden, sin solaparse, dentro de inicio y fin.
 - "velocidad": 1 para lo que se oye y tiene gracia, 1.5 o 2 para relleno, 3 solo para tramos largos sin nada.
 - El remate (el grito, la risa, la frase graciosa, la muerte) SIEMPRE a velocidad 1 y con un par de segundos de aire después.
-- Apunta a 20-45 segundos de clip final. Si el momento bruto dura más de un minuto, recórtalo de verdad.
+- REGLA DURA: el clip final NUNCA puede pasar de 60 segundos. Apunta a 20-45 segundos.
+- Si el momento bruto dura más de un minuto, recórtalo de verdad: tira lo que no aporte y acelera el resto.
 - Si el momento ya es corto y va seguido, deja "cortes" vacío.
 
 Responde SOLO con JSON:

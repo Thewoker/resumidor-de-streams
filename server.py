@@ -240,6 +240,9 @@ def patch_moment(key: str, mid: int, body: MomentPatch):
     changes = body.model_dump(exclude_none=True)
     if "status" in changes and changes["status"] not in ("pending", "approved", "discarded"):
         raise HTTPException(400, "Estado inválido")
+    if "edit" in changes:  # montaje hecho a mano: manda el usuario, no el límite automático
+        changes["manual_edit"] = True
+        changes["auto_edit"] = False
     return _update_moment(key, mid, changes)
 
 

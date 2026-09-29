@@ -57,6 +57,7 @@ dialog label input { display: block; width: 100%; margin-top: 6px; }
 .trim-tools .speeds { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 13px; }
 .trim-tools .sp.on { border-color: var(--accent); color: var(--accent); }
 .out-dur { white-space: nowrap; }
+.out-dur.too-long { color: var(--warn); }
 .subs-box { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; }
 .subs-box summary { cursor: pointer; font-weight: 600; }
 .subs-box p { font-size: 12px; margin: 8px 0; }
