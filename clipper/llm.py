@@ -24,6 +24,12 @@ Reglas del montaje:
 - CONTINUIDAD ANTE TODO: el clip es UNA sola escena seguida. Los cortes solo quitan pausas, repeticiones o
   relleno DENTRO de esa escena. Nunca pegues partes lejanas del stream (más de ~15 s de salto): queda incoherente.
 - Si lo bueno está en dos sitios alejados, elige uno solo. Vale más un clip corto que se entienda que uno largo a saltos.
+- CORTA SOLO EN SILENCIOS: cada corte va donde no se está hablando, entre una frase y la siguiente.
+  Jamás partas una frase por la mitad ni empieces el clip a mitad de una.
+- MISMO TEMA DE PRINCIPIO A FIN: mira de qué se habla en la transcripción. Cuando el tema cambia o la anécdota
+  termina, ahí acaba el clip. No sigas de largo hasta lo siguiente ni saltes a otra conversación aunque sea buena:
+  eso es otro momento aparte.
+- Acelera solo tramos sin voz (caminar, esperar, menús). Si en un tramo se habla, o se queda a 1x o se corta el clip.
 - Devuelve el montaje en "cortes": trozos en orden, sin solaparse, dentro de inicio y fin.
 - "velocidad": 1 para lo que se oye y tiene gracia, 1.5 o 2 para relleno, 3 solo para tramos largos sin nada.
 - El remate (el grito, la risa, la frase graciosa, la muerte) SIEMPRE a velocidad 1 y con un par de segundos de aire después.

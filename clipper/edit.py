@@ -66,7 +66,42 @@ def _blocks(segs, z, block=2.0):
     return out
 
 
-def _build(blocks, threshold, bridge=10.0, bridge_speed=2.0, pad=1.5, min_keep=3.0):
+def speech_of(transcript):
+    """Tramos en los que se está hablando, según la transcripción."""
+    return [{"start": float(s["start"]), "end": float(s["end"])}
+            for s in (transcript or []) if (s.get("text") or "").strip()]
+
+
+def _phrase_at(speech, t):
+    return next((p for p in speech if p["start"] - 0.15 <= t <= p["end"] + 0.15), None)
+
+
+def _talks_between(speech, a, b):
+    return any(p["end"] > a + 0.15 and p["start"] < b - 0.15 for p in speech)
+
+
+def _snap(keeps, speech):
+    """Ningún corte a mitad de frase: si un borde cae dentro de algo hablado, se estira hasta el silencio."""
+    if not speech:
+        return keeps
+    out = []
+    for k in keeps:
+        start, end = k["start"], k["end"]
+        p = _phrase_at(speech, start)
+        if p:
+            start = min(start, p["start"])
+        p = _phrase_at(speech, end)
+        if p:
+            end = max(end, p["end"])
+        if out and start <= out[-1]["end"] + 0.3:
+            out[-1]["end"] = max(out[-1]["end"], end)
+        else:
+            out.append({"start": start, "end": end})
+    return out
+
+
+def _build(blocks, threshold, bridge=10.0, bridge_speed=2.0, pad=1.5, min_keep=3.0,
+           speech=(), context_gap=5.0):
     """Trozos interesantes a 1x (con algo de aire alrededor); los huecos cortos se aceleran
     y los largos se tiran. Nada de trocitos sueltos: quedan clips picados."""
     lo, hi = blocks[0]["start"], blocks[-1]["end"]
@@ -93,16 +128,41 @@ def _build(blocks, threshold, bridge=10.0, bridge_speed=2.0, pad=1.5, min_keep=3
         else:
             padded.append({"start": start, "end": end})
 
-    # Continuidad: un clip es UNA escena. Si dos partes buenas están lejos, no se pegan:
-    # se elige la mejor zona y el resto se descarta.
+    padded = _snap(padded, speech)
+
+    # Continuidad: un clip es UNA escena. Se corta donde cambia el contexto y solo se acelera
+    # lo que queda entre medias si ahí no se está hablando.
     clusters, current = [], []
     for k in padded:
-        if current and k["start"] - current[-1]["end"] > bridge:
-            clusters.append(current)
-            current = []
+        if current:
+            gap_a, gap_b = current[-1]["end"], k["start"]
+            hablando = _talks_between(speech, gap_a, gap_b)
+            largo = gap_b - gap_a > bridge
+            # Si en el hueco se habla, saltárselo cambiaría de tema a mitad: se corta el clip ahí
+            if hablando or largo:
+                clusters.append(current)
+                current = []
         current.append(k)
     if current:
         clusters.append(current)
+
+    # Un silencio largo dentro de un trozo también marca final de contexto
+    if speech and context_gap:
+        split = []
+        for cluster in clusters:
+            piece = []
+            for k in cluster:
+                start = k["start"]
+                for a, b in zip(speech, speech[1:]):
+                    if a["end"] > start and b["start"] < k["end"] and b["start"] - a["end"] >= context_gap:
+                        piece.append({"start": start, "end": a["end"]})
+                        split.append(piece)
+                        piece = []
+                        start = b["start"]
+                piece.append({"start": start, "end": k["end"]})
+            if piece:
+                split.append(piece)
+        clusters = [c for c in split if c and c[-1]["end"] - c[0]["start"] >= min_keep]
 
     def weight(cluster):
         a, b = cluster[0]["start"], cluster[-1]["end"]
@@ -113,36 +173,58 @@ def _build(blocks, threshold, bridge=10.0, bridge_speed=2.0, pad=1.5, min_keep=3
     segs = []
     for i, k in enumerate(padded):
         gap = k["start"] - padded[i - 1]["end"] if i else 0
-        if i and gap <= bridge:  # hueco corto: se acelera y no se corta el hilo
+        if i and gap > 0:
             if gap < 1.5:  # tan corto que no merece un cambio de velocidad
                 k = {"start": padded[i - 1]["end"], "end": k["end"]}
-            else:
+            else:  # hueco en silencio: se acelera como transición
                 segs.append({"start": padded[i - 1]["end"], "end": k["start"], "speed": bridge_speed})
         segs.append({"start": k["start"], "end": k["end"], "speed": 1.0})
-    return _merge(segs)
+    return _merge(_trim_silence(segs, speech))
 
 
-def autofit(segs, z, max_dur=60.0):
-    """Si el clip pasa del máximo, lo monta solo: corta lo flojo y acelera el relleno."""
+def _trim_silence(segs, speech, lead=2.0, tail=2.5):
+    """Fuera el silencio sobrante antes de la primera frase y después de la última."""
+    if not segs or not speech:
+        return segs
+    a, b = segs[0]["start"], segs[-1]["end"]
+    dentro = [p for p in speech if p["end"] > a and p["start"] < b]
+    if not dentro:
+        return segs
+    lo, hi = max(a, dentro[0]["start"] - lead), min(b, dentro[-1]["end"] + tail)
+    out = []
+    for s in segs:
+        start, end = max(s["start"], lo), min(s["end"], hi)
+        if end - start >= 0.4:
+            out.append({**s, "start": start, "end": end})
+    return out or segs
+
+
+def autofit(segs, z, max_dur=60.0, transcript=None):
+    """Si el clip pasa del máximo, lo monta solo: se queda con una escena, corta lo flojo
+    y acelera los huecos en silencio. Nunca corta a mitad de frase."""
     if out_duration(segs) <= max_dur:
         return segs, False
 
     blocks = _blocks(segs, z)
     if not blocks:
         return segs, False
+    speech = speech_of(transcript)
     scores = sorted(b["score"] for b in blocks)
 
     for keep in (0.6, 0.5, 0.4, 0.3, 0.25, 0.2, 0.15, 0.1):
         threshold = scores[min(int(len(scores) * (1 - keep)), len(scores) - 1)]
         for bridge_speed in (2.0, 3.0):
-            candidate = _build(blocks, threshold, bridge_speed=bridge_speed)
+            candidate = _build(blocks, threshold, bridge_speed=bridge_speed, speech=speech)
             if candidate and out_duration(candidate) <= max_dur:
                 return candidate, True
 
-    # Último recurso: la ventana de max_dur alrededor del bloque más fuerte, con aire al final
+    # Último recurso: la ventana de max_dur alrededor del bloque más fuerte, cortando en silencios
     best = max(blocks, key=lambda b: b["score"])
     end = min(segs[-1]["end"], best["end"] + max_dur * 0.35)
-    return [{"start": max(segs[0]["start"], end - max_dur), "end": end, "speed": 1.0}], True
+    start = max(segs[0]["start"], end - max_dur)
+    [snapped] = _snap([{"start": start, "end": end}], speech) or [{"start": start, "end": end}]
+    snapped["end"] = min(snapped["end"], snapped["start"] + max_dur)
+    return [{**snapped, "speed": 1.0}], True
 
 
 def clamp_to_segments(segs, start, end):

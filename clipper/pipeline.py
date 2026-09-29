@@ -150,7 +150,7 @@ def cut_moment(workdir: Path, m, video, transcript, s):
     clips.mkdir(exist_ok=True)
     # Salvo que lo haya montado el usuario a mano, se respeta el máximo de duración
     if not m.get("manual_edit") and edit.out_duration(edit.segments(m)) > s.max_clip:
-        segs, edited = edit.autofit(edit.segments(m), excitement_of(workdir), s.max_clip)
+        segs, edited = edit.autofit(edit.segments(m), excitement_of(workdir), s.max_clip, transcript)
         if edited:
             m["edit"] = {**(m.get("edit") or {}), "cuts": [
                 {"start": round(x["start"], 2), "end": round(x["end"], 2), "speed": x["speed"]} for x in segs]}
@@ -261,7 +261,7 @@ def process(source, s, key, title="", meta=None):
         moments = []
         for i, m in enumerate(ranked, 1):
             # Regla dura: ningún clip pasa del máximo. Si pasa, se monta solo (corte + cámara rápida)
-            segs, edited = edit.autofit(edit.segments(m), z, s.max_clip)
+            segs, edited = edit.autofit(edit.segments(m), z, s.max_clip, transcript)
             m = {**m, "id": i, "status": "pending", "file": None, "vertical": None}
             if edited:
                 m["edit"] = {**(m.get("edit") or {}), "cuts": [
