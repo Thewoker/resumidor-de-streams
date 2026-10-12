@@ -99,6 +99,40 @@ function confirmDialog({ title, message, requireText = false, okText = "Borrar" 
   });
 }
 
+// Reproductor perezoso: el vídeo no se descarga hasta que lo pedís.
+// Con varias tarjetas en pantalla, cargarlos todos a la vez hacía que tardara una eternidad.
+function lazyVideo(src, label = "") {
+  const box = document.createElement("div");
+  box.className = "lazy-video";
+  box.innerHTML = `<button class="play" title="Cargar y reproducir">▶</button><span class="lazy-label muted"></span>`;
+  $(".lazy-label", box).textContent = label;
+  box.dataset.src = src;
+
+  box.load = (play = true) => {
+    if (box.video) {
+      if (box.video.src !== location.origin + box.dataset.src) box.video.src = box.dataset.src;
+      if (play) box.video.play().catch(() => {});
+      return box.video;
+    }
+    const v = document.createElement("video");
+    v.controls = true;
+    v.preload = "auto";
+    v.src = box.dataset.src;
+    if (play) v.autoplay = true;
+    box.innerHTML = "";
+    box.appendChild(v);
+    box.classList.add("loaded");
+    box.video = v;
+    return v;
+  };
+  box.setSource = (next, play = true) => {
+    box.dataset.src = next;
+    if (box.video) box.load(play);
+  };
+  $(".play", box).onclick = () => box.load(true);
+  return box;
+}
+
 // Marca un clip como ya subido a redes y borra el archivo para liberar espacio
 async function markPublished(key, m, after) {
   if (m.file) {
@@ -148,8 +182,7 @@ async function showApproved() {
   for (const m of items) {
     const base = `/files/${m.key}/clips/`;
     const el = document.createElement("article");
-    el.innerHTML = `<video controls preload="metadata" src="${base + m.file}"></video>
-      <h4></h4><p class="from muted"></p>
+    el.innerHTML = `<h4></h4><p class="from muted"></p>
       <div class="acts">
         ${m.vertical ? `<button class="ghost v">Ver vertical</button><button class="ghost h">Ver horizontal</button>` : ""}
         <button class="ghost subido">⬆ Ya lo subí</button>
@@ -157,12 +190,13 @@ async function showApproved() {
         <span class="downloads"><a href="${base + m.file}" download>⬇ horizontal</a>${
           m.vertical ? `<a href="${base + m.vertical}" download>⬇ vertical</a>` : ""}</span>
       </div>`;
+    const video = lazyVideo(base + m.file, m.title);
+    el.prepend(video);
     $("h4", el).textContent = m.title;
     $(".from", el).textContent = `${m.vod_title} · ${fmt(m.start)} · ${Math.round(m.end - m.start)} s`;
-    const video = $("video", el);
     if (m.vertical) {
-      $(".v", el).onclick = () => { video.src = base + m.vertical; };
-      $(".h", el).onclick = () => { video.src = base + m.file; };
+      $(".v", el).onclick = () => video.setSource(base + m.vertical);
+      $(".h", el).onclick = () => video.setSource(base + m.file);
     }
     $(".subido", el).onclick = () => markPublished(m.key, m, showApproved);
     $(".open", el).onclick = () => { showStreams(); openVod(m.key); };
@@ -364,16 +398,15 @@ function momentCard(m) {
   if (m.cutting) {
     media.innerHTML = `<div class="placeholder">✂ Cortando…</div>`;
   } else if (m.file) {
-    const v = document.createElement("video");
-    v.controls = true; v.preload = "metadata"; v.src = base + m.file;
+    const v = lazyVideo(base + m.file, `${Math.round((m.out_duration || m.end - m.start))} s`);
     media.appendChild(v);
     if (m.vertical) {
       const t = document.createElement("div");
       t.className = "toggle";
       t.innerHTML = `<button class="ghost">Horizontal</button><button class="ghost">Vertical</button>`;
       const [hb, vb] = t.querySelectorAll("button");
-      hb.onclick = () => { v.src = base + m.file; };
-      vb.onclick = () => { v.src = base + m.vertical; };
+      hb.onclick = () => v.setSource(base + m.file);
+      vb.onclick = () => v.setSource(base + m.vertical);
       media.appendChild(t);
     }
   } else {
