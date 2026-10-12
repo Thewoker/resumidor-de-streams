@@ -32,6 +32,9 @@ Lo genera la IA al analizar el stream y se puede retocar en la interfaz con **�
 el programa lo rehace solo: conserva los picos de audio con algo de aire, acelera los huecos cortos y tira los largos.
 Un montaje hecho a mano (`manual_edit`) manda sobre el límite.
 
+**Estados de un clip:** `pending`, `approved`, `discarded` y `published` (ya subido a redes: se borra el archivo
+para liberar espacio y queda el registro). `GET /api/storage` resume cuánto ocupan los clips por estado.
+
 ## Requisitos
 
 - Python 3.10+, ffmpeg con NVENC, GPU NVIDIA (probado para RTX 3070, 8 GB)

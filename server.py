@@ -238,7 +238,7 @@ class MomentPatch(BaseModel):
 @app.patch("/api/vods/{key}/moments/{mid}")
 def patch_moment(key: str, mid: int, body: MomentPatch):
     changes = body.model_dump(exclude_none=True)
-    if "status" in changes and changes["status"] not in ("pending", "approved", "discarded"):
+    if "status" in changes and changes["status"] not in ("pending", "approved", "discarded", "published"):
         raise HTTPException(400, "Estado inválido")
     if "edit" in changes:  # montaje hecho a mano: manda el usuario, no el límite automático
         changes["manual_edit"] = True
@@ -327,6 +327,62 @@ def cleanup_vod(key: str):
                 freed += path.stat().st_size
                 path.unlink()
     return {"deleted": count, "freed_mb": round(freed / 1e6, 1)}
+
+
+@app.post("/api/vods/{key}/moments/{mid}/published")
+def mark_published(key: str, mid: int):
+    """Clip ya subido a redes: se borra el archivo para no ocupar espacio y queda el registro."""
+    workdir = OUT / key
+    with pipeline.lock:
+        moments = read_json(workdir / "moments.json", [])
+        m = next((x for x in moments if x["id"] == mid), None)
+        if not m:
+            raise HTTPException(404, "Momento no encontrado")
+        freed = _delete_files(workdir, m)
+        m["status"] = "published"
+        m["published_at"] = time.time()
+        write_json(workdir / "moments.json", moments)
+    return {"freed_mb": round(freed / 1e6, 1), "moment": m}
+
+
+@app.post("/api/cleanup-published")
+def cleanup_published(body: KeysBody):
+    """Libera el espacio de todos los clips marcados como subidos."""
+    freed, count = 0, 0
+    for d in OUT.iterdir():
+        if not d.is_dir() or (body.keys and d.name not in body.keys):
+            continue
+        with pipeline.lock:
+            moments = read_json(d / "moments.json")
+            if not moments:
+                continue
+            changed = False
+            for m in moments:
+                if m.get("status") == "published" and (m.get("file") or m.get("vertical")):
+                    freed += _delete_files(d, m)
+                    count += 1
+                    changed = True
+            if changed:
+                write_json(d / "moments.json", moments)
+    return {"deleted": count, "freed_mb": round(freed / 1e6, 1)}
+
+
+@app.get("/api/storage")
+def storage():
+    """Cuánto ocupan los clips, por estado."""
+    totals = {"approved": 0, "pending": 0, "discarded": 0, "published": 0, "otros": 0}
+    for d in OUT.iterdir():
+        if not d.is_dir():
+            continue
+        clips = d / "clips"
+        if not clips.exists():
+            continue
+        sizes = {p.name: p.stat().st_size for p in clips.glob("*") if p.is_file()}
+        for m in read_json(d / "moments.json", []):
+            own = sum(sizes.pop(n, 0) for n in (m.get("file"), m.get("vertical")) if n)
+            totals[m.get("status") if m.get("status") in totals else "otros"] += own
+        totals["otros"] += sum(sizes.values())
+    return {k: round(v / 1e6, 1) for k, v in totals.items()}
 
 
 @app.get("/api/clips")

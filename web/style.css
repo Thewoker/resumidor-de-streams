@@ -189,6 +189,8 @@ dialog label input { display: block; width: 100%; margin-top: 6px; }
 .moment { display: grid; grid-template-columns: minmax(200px, 360px) 1fr; gap: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 12px; }
 .moment.approved { border-color: var(--accent); }
 .moment.discarded { opacity: .45; }
+.moment.published { border-color: #4a7fd4; }
+.badge.published, .moment.published .score { color: #8ab4ff; }
 .moment.active { box-shadow: 0 0 0 2px var(--warn); }
 .media video { width: 100%; border-radius: 6px; background: #000; max-height: 360px; display: block; }
 .media .placeholder { aspect-ratio: 16/9; display: grid; place-items: center; background: var(--bg); border-radius: 6px; color: var(--muted); text-align: center; padding: 10px; }

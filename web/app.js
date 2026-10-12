@@ -99,16 +99,46 @@ function confirmDialog({ title, message, requireText = false, okText = "Borrar" 
   });
 }
 
+// Marca un clip como ya subido a redes y borra el archivo para liberar espacio
+async function markPublished(key, m, after) {
+  if (m.file) {
+    const ok = await confirmDialog({
+      title: "Marcar como subido",
+      message: `“${m.title}”\n\nSe borra el archivo del servidor para no ocupar espacio. El momento queda guardado como subido y lo podés volver a cortar cuando quieras.`,
+      okText: "Sí, ya lo subí",
+    });
+    if (!ok) return;
+  }
+  const r = await api(`/api/vods/${key}/moments/${m.id}/published`, { method: "POST" });
+  if (after) await after();
+  return r;
+}
+
 // ---------- vista de aprobados ----------
 async function showApproved() {
   view = "approved";
   $("#tab-streams").classList.remove("on");
   $("#tab-approved").classList.add("on");
   const main = $("#main");
-  const items = await api("/api/approved");
-  main.innerHTML = `<div class="vod-head"><h2>⭐ Clips aprobados <span class="muted">(${items.length})</span></h2>
-    ${items.length ? `<button class="feed-approved">📱 Verlos en modo scroll</button>` : ""}</div>`;
+  const [items, space] = await Promise.all([api("/api/approved"), api("/api/storage").catch(() => null)]);
+  const ocupado = space ? Object.values(space).reduce((a, b) => a + b, 0) : 0;
+  main.innerHTML = `<div class="vod-head"><div>
+      <h2>⭐ Clips aprobados <span class="muted">(${items.length})</span></h2>
+      ${space ? `<p class="muted">Los clips ocupan ${ocupado.toFixed(0)} MB · aprobados ${space.approved} MB · pendientes ${space.pending} MB · descartados ${space.discarded} MB</p>` : ""}
+    </div>
+    <div class="head-actions">
+      ${items.length ? `<button class="feed-approved">📱 Verlos en modo scroll</button>` : ""}
+      ${space && space.published > 0 ? `<button class="ghost free-published">🗑 Liberar ${space.published} MB de subidos</button>` : ""}
+    </div></div>`;
   if (items.length) $(".feed-approved", main).onclick = () => openFeed(null, "approved");
+  const free = $(".free-published", main);
+  if (free) {
+    free.onclick = async () => {
+      const r = await api("/api/cleanup-published", { method: "POST", body: JSON.stringify({}) });
+      alert(`Liberados ${r.freed_mb} MB de ${r.deleted} clips ya subidos`);
+      showApproved();
+    };
+  }
   if (!items.length) {
     main.innerHTML += `<p class="empty">Todavía no aprobaste ningún clip.<br>Aprobalos desde cada stream y aparecen acá.</p>`;
     return;
@@ -122,6 +152,7 @@ async function showApproved() {
       <h4></h4><p class="from muted"></p>
       <div class="acts">
         ${m.vertical ? `<button class="ghost v">Ver vertical</button><button class="ghost h">Ver horizontal</button>` : ""}
+        <button class="ghost subido">⬆ Ya lo subí</button>
         <button class="ghost open">Ir al stream</button>
         <span class="downloads"><a href="${base + m.file}" download>⬇ horizontal</a>${
           m.vertical ? `<a href="${base + m.vertical}" download>⬇ vertical</a>` : ""}</span>
@@ -133,6 +164,7 @@ async function showApproved() {
       $(".v", el).onclick = () => { video.src = base + m.vertical; };
       $(".h", el).onclick = () => { video.src = base + m.file; };
     }
+    $(".subido", el).onclick = () => markPublished(m.key, m, showApproved);
     $(".open", el).onclick = () => { showStreams(); openVod(m.key); };
     grid.appendChild(el);
   }
@@ -345,7 +377,10 @@ function momentCard(m) {
       media.appendChild(t);
     }
   } else {
-    media.innerHTML = `<div class="placeholder">${m.cut_error ? "Error: " + m.cut_error : "Sin clip todavía.<br>Pulsá ✂ Cortar."}</div>`;
+    media.innerHTML = `<div class="placeholder">${
+      m.cut_error ? "Error: " + m.cut_error
+      : m.status === "published" ? "⬆ Ya subido.<br>El archivo se borró para liberar espacio.<br>Podés volver a cortarlo."
+      : "Sin clip todavía.<br>Pulsá ✂ Cortar."}</div>`;
   }
 
   const score = $(".score", el);
@@ -405,6 +440,14 @@ function momentCard(m) {
     drawTimeline();
   };
   $(".trim", el).onclick = () => openTrim(current, m);
+  const published = $(".published", el);
+  if (m.status === "published") {
+    published.textContent = "↺ No lo subí";
+    published.onclick = () => patch(m, { status: "approved" });
+  } else {
+    published.disabled = !m.file;
+    published.onclick = () => markPublished(current, m, () => refreshDetail());
+  }
   const approve = $(".approve", el), discard = $(".discard", el);
   approve.textContent = m.status === "approved" ? "↺ Quitar aprobado" : "✓ Aprobar";
   discard.textContent = m.status === "discarded" ? "↺ Recuperar" : "✕ Descartar";

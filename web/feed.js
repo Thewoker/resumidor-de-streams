@@ -111,6 +111,7 @@ function slide(m, i) {
       <button class="dislike" title="Descartar (←)"><span>👎</span><small>Descartar</small></button>
       ${m.vertical ? `<button class="flip" title="Cambiar formato"><span>⇆</span><small>Horizontal</small></button>` : ""}
       <a class="dl" download href="${base + (m.vertical || m.file)}" title="Descargar"><span>⬇</span><small>Descargar</small></a>
+      ${approvedMode ? `<button class="subido" title="Ya lo subí: borra el archivo"><span>⬆</span><small>Ya lo subí</small></button>` : ""}
       <button class="skip" title="Saltar (↓)"><span>⏭</span><small>Saltar</small></button>
     </div>`;
   const video = $("video", el);
@@ -126,6 +127,16 @@ function slide(m, i) {
   $(".like", el).onclick = () => decide(i, "approved");
   $(".dislike", el).onclick = () => decide(i, "discarded");
   $(".skip", el).onclick = () => goTo(i + 1);
+  const subido = $(".subido", el);
+  if (subido) {
+    subido.onclick = async () => {
+      await markPublished(m.key, m, null);
+      const stamp = $(".stamp", el);
+      stamp.textContent = "⬆ SUBIDO";
+      stamp.className = "stamp show approved";
+      setTimeout(() => { stamp.className = "stamp"; goTo(i + 1); }, 550);
+    };
+  }
   const flip = $(".flip", el);
   if (flip) {
     flip.onclick = () => {
