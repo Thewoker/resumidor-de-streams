@@ -329,6 +329,10 @@ def cleanup_vod(key: str):
     return {"deleted": count, "freed_mb": round(freed / 1e6, 1)}
 
 
+class KeysBody(BaseModel):
+    keys: list[str] | None = None
+
+
 @app.post("/api/vods/{key}/moments/{mid}/published")
 def mark_published(key: str, mid: int):
     """Clip ya subido a redes: se borra el archivo para no ocupar espacio y queda el registro."""
@@ -408,10 +412,6 @@ def list_clips(status: str = "approved", key: str | None = None):
 @app.get("/api/approved")
 def list_approved():
     return list_clips("approved")
-
-
-class KeysBody(BaseModel):
-    keys: list[str] | None = None
 
 
 @app.post("/api/cleanup-discarded")
