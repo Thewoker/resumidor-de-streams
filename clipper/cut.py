@@ -90,38 +90,41 @@ def _atempo(speed):
 def horizontal(video, start, end, out: Path, cpu=False, speed=1.0):
     # -ss y -t antes de -i: así limitan lo que se lee del stream, no lo que dura el resultado
     # (con cámara rápida, un trozo de 20 s a 2x tiene que dar 10 s de clip)
-    args = ["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.2f}", "-t", f"{end - start:.2f}", "-i", _input(video)]
-    if abs(speed - 1) > 0.01:
-        args += ["-filter_complex", f"[0:v]setpts=PTS/{speed:.4f}[v];[0:a]{_atempo(speed)}[a]", "-map", "[v]", "-map", "[a]"]
-    args += [*_encoder(cpu), "-c:a", "aac", "-b:a", "160k", "-r", "60", str(out)]
+    args = ["ffmpeg", "-y", "-v", "error", "-accurate_seek",
+            "-ss", f"{start:.3f}", "-t", f"{end - start:.3f}", "-i", _input(video)]
+    graph = (f"[0:v]setpts=(PTS-STARTPTS)/{speed:.4f},fps=60[v];"
+             f"[0:a]asetpts=PTS-STARTPTS,{_atempo(speed)},aresample=async=1:first_pts=0[a]")
+    args += ["-filter_complex", graph, "-map", "[v]", "-map", "[a]"]
+    args += [*_encoder(cpu), "-c:a", "aac", "-b:a", "160k", str(out)]
     _run(args, cpu)
 
 
 def montage(video, segs, out: Path, cpu=False):
-    """Monta el clip a partir de varios trozos, cada uno con su velocidad."""
+    """Monta el clip a partir de varios trozos, cada uno con su velocidad.
+
+    Todo en un único ffmpeg con el filtro concat: cortar cada trozo por separado y pegarlos
+    después iba desfasando el audio respecto al vídeo trozo a trozo."""
     if len(segs) == 1:
         horizontal(video, segs[0]["start"], segs[0]["end"], out, cpu, segs[0]["speed"])
         return out
 
-    tmp = out.parent / f".tmp_{out.stem}"
-    tmp.mkdir(exist_ok=True)
-    try:
-        parts = []
-        for i, s in enumerate(segs):
-            part = tmp / f"{i:03}.mp4"
-            horizontal(video, s["start"], s["end"], part, cpu, s["speed"])
-            parts.append(part)
-        listing = tmp / "list.txt"
-        listing.write_text("".join(f"file '{p.name}'\n" for p in parts), encoding="utf-8")
-        _run(
-            ["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", listing.name,
-             "-c", "copy", str(out.resolve())],
-            cpu=True, cwd=tmp,
-        )
-    finally:
-        for p in tmp.glob("*"):
-            p.unlink(missing_ok=True)
-        tmp.rmdir()
+    args = ["ffmpeg", "-y", "-v", "error"]
+    for s in segs:
+        args += ["-accurate_seek", "-ss", f"{s['start']:.3f}", "-t", f"{s['end'] - s['start']:.3f}",
+                 "-i", _input(video)]
+
+    chains, labels = [], ""
+    for i, s in enumerate(segs):
+        speed = s["speed"]
+        v = f"[{i}:v]setpts=(PTS-STARTPTS)/{speed:.4f},fps=60[v{i}]"
+        a = f"[{i}:a]asetpts=PTS-STARTPTS,{_atempo(speed)},aresample=async=1:first_pts=0[a{i}]"
+        chains += [v, a]
+        labels += f"[v{i}][a{i}]"
+    graph = ";".join(chains) + f";{labels}concat=n={len(segs)}:v=1:a=1[v][a]"
+
+    args += ["-filter_complex", graph, "-map", "[v]", "-map", "[a]",
+             *_encoder(cpu), "-c:a", "aac", "-b:a", "160k", str(out)]
+    _run(args, cpu)
     return out
 
 
