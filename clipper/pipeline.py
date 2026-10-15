@@ -161,12 +161,31 @@ def cut_moment(workdir: Path, m, video, transcript, s):
             (clips / old).unlink(missing_ok=True)
     name = f"{m['id']:03}_{media.slug(m['title'])}_{int(time.time()) % 10000}"
     segs = edit.segments(m)
+    subs = (m.get("edit") or {}).get("subs") or cut.subtitle_entries(transcript, segs[0]["start"], segs[-1]["end"])
+
+    # Si el VOD ya no está en disco, el corte saldría del HLS de Kick, donde ffmpeg se posiciona
+    # peor y el audio puede quedar corrido. Bajamos primero el tramo necesario y cortamos sobre él.
+    window = None
+    if not Path(str(video)).exists():
+        window = clips / f".win_{m['id']:03}.mp4"
+        wa = max(0.0, segs[0]["start"] - 2)
+        wb = segs[-1]["end"] + 2
+        print(f"  bajando el tramo {fmt(wa)}-{fmt(wb)} del stream para cortar con precisión")
+        cut.horizontal(video, wa, wb, window, s.cpu)
+        video = window
+        segs = [{**x, "start": x["start"] - wa, "end": x["end"] - wa} for x in segs]
+        subs = [{**x, "start": x["start"] - wa, "end": x["end"] - wa} for x in subs]
+
     m["file"] = f"{name}.mp4"
-    cut.montage(video, segs, clips / m["file"], s.cpu)
+    try:
+        cut.montage(video, segs, clips / m["file"], s.cpu)
+        if s.vertical:
+            srt = clips / f"{name}.srt"
+            cut.write_srt(subs, segs, srt)
+    finally:
+        if window:
+            window.unlink(missing_ok=True)
     if s.vertical:
-        srt = clips / f"{name}.srt"
-        subs = (m.get("edit") or {}).get("subs") or cut.subtitle_entries(transcript, segs[0]["start"], segs[-1]["end"])
-        cut.write_srt(subs, segs, srt)
         m["vertical"] = f"{name}_vertical.mp4"
         # El vertical se hace a partir del horizontal ya montado: así empieza exactamente en 0 y
         # los subtítulos quedan sincronizados aunque el corte venga del HLS de Kick.
