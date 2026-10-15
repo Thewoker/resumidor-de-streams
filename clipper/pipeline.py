@@ -131,16 +131,20 @@ def clean_temp(workdir: Path):
 _z_cache = {}
 
 
-def excitement_of(workdir: Path):
-    """Curva de intensidad del stream (para montar solo los clips largos)."""
+def excitement_of(workdir: Path, raw=False):
+    """Curva de intensidad del stream (para montar solo los clips largos).
+    Con raw=True devuelve el volumen en dB tal cual, que es lo que sirve para localizar un tramo."""
     path = workdir / "loudness.npy"
     if not path.exists():
         return None
+    import numpy as np
+    db = np.load(path)
+    if raw:
+        return db
     key = (str(path), path.stat().st_mtime)
     if key not in _z_cache:
-        import numpy as np
         _z_cache.clear()
-        _z_cache[key] = audio.excitement(np.load(path))
+        _z_cache[key] = audio.excitement(db)
     return _z_cache[key]
 
 
@@ -167,14 +171,34 @@ def cut_moment(workdir: Path, m, video, transcript, s):
     # peor y el audio puede quedar corrido. Bajamos primero el tramo necesario y cortamos sobre él.
     window = None
     if not Path(str(video)).exists():
+        # Bajamos el tramo con margen: al posicionarse en el HLS de Kick, ffmpeg puede irse unos
+        # segundos, así que después buscamos dónde cayó de verdad comparando el volumen con el
+        # del VOD analizado. Sin ese ajuste el clip sale corrido respecto a los subtítulos.
         window = clips / f".win_{m['id']:03}.mp4"
-        wa = max(0.0, segs[0]["start"] - 2)
-        wb = segs[-1]["end"] + 2
-        print(f"  bajando el tramo {fmt(wa)}-{fmt(wb)} del stream para cortar con precisión")
+        margen = 30.0
+        wa = max(0.0, segs[0]["start"] - margen)
+        wb = segs[-1]["end"] + margen
+        print(f"  bajando el tramo {fmt(wa)}-{fmt(wb)} del stream")
         cut.horizontal(video, wa, wb, window, s.cpu)
+
+        real = wa
+        db = excitement_of(workdir, raw=True)
+        if db is not None:
+            try:
+                wdb = audio.loudness_of(window)
+                pos, confianza = audio.find_offset(wdb, db, wa)
+                if pos is not None and confianza > 0.15:
+                    real = float(pos)
+                    print(f"  el tramo descargado empieza en {fmt(real)} (pedido {fmt(wa)}, "
+                          f"desvío {real - wa:+.1f}s, confianza {confianza:.2f})")
+                else:
+                    print("  no se pudo confirmar el punto del tramo; se usa el pedido")
+            except Exception as e:
+                print(f"  no se pudo medir el desvío del tramo: {e}")
+
         video = window
-        segs = [{**x, "start": x["start"] - wa, "end": x["end"] - wa} for x in segs]
-        subs = [{**x, "start": x["start"] - wa, "end": x["end"] - wa} for x in subs]
+        segs = [{**x, "start": x["start"] - real, "end": x["end"] - real} for x in segs]
+        subs = [{**x, "start": x["start"] - real, "end": x["end"] - real} for x in subs]
 
     m["file"] = f"{name}.mp4"
     try:
