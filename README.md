@@ -32,6 +32,15 @@ Lo genera la IA al analizar el stream y se puede retocar en la interfaz con **�
 el programa lo rehace solo: conserva los picos de audio con algo de aire, acelera los huecos cortos y tira los largos.
 Un montaje hecho a mano (`manual_edit`) manda sobre el límite.
 
+## Clips pedidos a viva voz
+
+Si durante el directo decís algo como **"hacé un clip de esto"**, al analizar el stream se crea un momento con
+los `VOICE_CLIP_SECONDS` anteriores (30 s por defecto). Estos clips van los primeros y se cortan siempre, sin
+pasar por la nota de la IA. Se reconocen por la marca 🎙 en la interfaz.
+
+Frases que se detectan: "haz/hace/hacé un clip", "clip de esto", "clipea esto", "clipealo", "corta esto",
+"guarda esto", "eso es clip", "eso va al clip". Se pueden cambiar con `VOICE_KEYWORDS` (separadas por comas).
+
 **Estados de un clip:** `pending`, `approved`, `discarded` y `published` (ya subido a redes: se borra el archivo
 para liberar espacio y queda el registro). `GET /api/storage` resume cuánto ocupan los clips por estado.
 
@@ -76,6 +85,8 @@ Build pack Dockerfile, puerto 8000, volumen persistente en `/data`, y `--gpus al
 | `TOP_CLIPS` | `15` |
 | `MIN_SCORE` | `6` |
 | `MAX_CLIP_SECONDS` | `60` |
+| `VOICE_CLIP_SECONDS` | `30` |
+| `VOICE_KEYWORDS` | (vacío = lista por defecto) |
 | `AUTO_PROCESS` | `1` |
 | `CHECK_INTERVAL` | `600` |
 | `SKIP_TITLES` | (vacío, p. ej. `meteoro`) |

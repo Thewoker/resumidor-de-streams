@@ -116,7 +116,8 @@ function slide(m, i) {
     </div>`;
   const video = $("video", el);
   video.dataset.src = base + (m.vertical || m.file);
-  $(".score", el).textContent = m.llm != null ? `IA ${m.llm.toFixed(0)}/10` : "🔊 pico de audio";
+  $(".score", el).textContent = m.voice ? "🎙 pedido en el directo"
+    : m.llm != null ? `IA ${m.llm.toFixed(0)}/10` : "🔊 pico de audio";
   $(".time", el).textContent = `${fmt(m.start)} · ${Math.round(m.end - m.start)} s`;
   $(".title", el).textContent = m.title;
   $(".from", el).textContent = m.vod_title;

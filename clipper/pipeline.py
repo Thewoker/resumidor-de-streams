@@ -3,7 +3,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import audio, cut, edit, llm, media, notify, scoring, transcribe
+from . import audio, cut, edit, llm, media, notify, scoring, transcribe, voice
 
 lock = threading.Lock()
 
@@ -301,6 +301,14 @@ def process(source, s, key, title="", meta=None):
         )
         llm.unload(s.ollama, s.model)
         ranked = scoring.rank(found, peaks, z, total, top=200, min_llm=s.min_score)
+
+        # Clips pedidos a viva voz durante el directo: van primero y no dependen de la nota de la IA
+        pedidos = voice.find_commands(transcript, s.voice_words or voice.PALABRAS, s.voice_seconds, total=total)
+        if pedidos:
+            print(f"  {len(pedidos)} clips pedidos en el directo")
+            solapa = lambda a, b: min(a["end"], b["end"]) - max(a["start"], b["start"]) > 3
+            ranked = pedidos + [m for m in ranked if not any(solapa(m, p) for p in pedidos)]
+
         moments = []
         for i, m in enumerate(ranked, 1):
             # Regla dura: ningún clip pasa del máximo. Si pasa, se monta solo (corte + cámara rápida)

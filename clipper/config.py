@@ -12,6 +12,9 @@ class Settings:
     top: int = int(os.getenv("TOP_CLIPS", "15"))
     min_score: float = float(os.getenv("MIN_SCORE", "6"))
     max_clip: float = float(os.getenv("MAX_CLIP_SECONDS", "60"))
+    voice_seconds: float = float(os.getenv("VOICE_CLIP_SECONDS", "30"))
+    voice_words: list = field(default_factory=lambda: [
+        w.strip() for w in os.getenv("VOICE_KEYWORDS", "").split(",") if w.strip()])
     lang: str = os.getenv("LANGUAGE", "es")
     whisper: str = os.getenv("WHISPER_MODEL", "large-v3")
     ollama: str = os.getenv("OLLAMA_URL", "http://192.168.1.199:11434")

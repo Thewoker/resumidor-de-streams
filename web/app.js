@@ -417,7 +417,8 @@ function momentCard(m) {
   }
 
   const score = $(".score", el);
-  score.textContent = m.llm != null ? m.llm.toFixed(0) + "/10" : "🔊";
+  score.textContent = m.voice ? "🎙" : m.llm != null ? m.llm.toFixed(0) + "/10" : "🔊";
+  if (m.voice) score.title = "Lo pediste durante el directo";
   score.title = `puntuación ${m.score?.toFixed(2)} · audio ${m.audio != null ? m.audio.toFixed(2) : "-"}`;
   const name = $(".name", el);
   name.value = m.title;
