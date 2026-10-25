@@ -7,10 +7,12 @@ los pediste vos, así que se cortan siempre y van los primeros.
 import re
 import unicodedata
 
+# Solo frases que no se usan hablando de la partida: "corta esto", "guarda esto" y similares
+# salían en plena jerga del juego y generaban clips sin querer.
+# Las tildes no importan: el texto se normaliza antes de comparar.
 PALABRAS = (
-    "haz un clip", "hace un clip", "hacé un clip", "has un clip", "hagan un clip",
-    "clip de esto", "clipea esto", "clipeá esto", "clipealo", "clipéalo", "clipeen esto",
-    "corta esto", "cortá esto", "guarda esto", "guardá esto", "eso es clip", "eso va al clip",
+    "haz un clip", "hace un clip", "has un clip", "hagan un clip",
+    "clipea esto", "clipealo", "clipeen esto",
 )
 
 
