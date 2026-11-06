@@ -284,7 +284,9 @@ def process(source, s, key, title="", meta=None):
         llm.unload(s.ollama, s.model)  # que Ollama no ocupe la VRAM mientras corre Whisper
         transcript = transcribe.transcribe(
             wav, workdir, s.whisper, language=s.lang,
-            on_loading=lambda: p.update(0, f"Cargando Whisper {s.whisper} en la gráfica (la primera vez se descarga, ~3 GB)…"),
+            on_loading=lambda nombre, alternativa: p.update(0, (
+                f"La gráfica estaba sin memoria: probando con el modelo {nombre}, más liviano…" if alternativa
+                else f"Cargando Whisper {nombre} en la gráfica (la primera vez se descarga, ~3 GB)…")),
             on_progress=lambda sec, text: p.update(sec / total, f"{fmt(sec)} de {fmt(total)} · “{text[:90]}”"),
         )
         p.done(f"{len(transcript)} frases transcritas")

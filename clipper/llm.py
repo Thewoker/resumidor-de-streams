@@ -1,4 +1,5 @@
 import json
+import time
 from pathlib import Path
 
 import requests
@@ -78,12 +79,32 @@ def _cuts(raw, start, end):
     return cuts
 
 
-def unload(url, model):
-    """Saca el modelo de la VRAM (Whisper y Ollama no caben juntos en 8 GB)."""
+def loaded_models(url):
+    """Modelos que Ollama tiene ahora mismo en memoria."""
     try:
-        requests.post(f"{url}/api/generate", json={"model": model, "keep_alive": 0}, timeout=30)
-    except requests.RequestException:
-        pass
+        r = requests.get(f"{url}/api/ps", timeout=10)
+        r.raise_for_status()
+        return [m.get("name") or m.get("model") for m in r.json().get("models", [])]
+    except (requests.RequestException, ValueError):
+        return []
+
+
+def unload(url, model, wait=40):
+    """Saca los modelos de la VRAM y ESPERA a que se libere de verdad.
+    Ollama tarda unos segundos en soltarla y Whisper no entra hasta entonces (8 GB no dan para los dos)."""
+    for m in {model, *loaded_models(url)}:
+        if not m:
+            continue
+        try:
+            requests.post(f"{url}/api/generate", json={"model": m, "keep_alive": 0}, timeout=30)
+        except requests.RequestException:
+            pass
+    esperado = time.time() + wait
+    while time.time() < esperado:
+        if not loaded_models(url):
+            return True
+        time.sleep(2)
+    return not loaded_models(url)
 
 
 def _windows(transcript, size=150, step=120):

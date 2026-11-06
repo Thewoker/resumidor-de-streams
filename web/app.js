@@ -22,8 +22,9 @@ const dur = (sec) => {
 // Traduce errores técnicos a algo accionable
 function explainError(err) {
   if (!err) return "";
-  if (/CUDA|cuda|NVIDIA|nvidia/.test(err)) return "La gráfica no está disponible dentro del contenedor. Revisá que \"--gpus all\" esté en Custom Docker Options de Coolify y hacé Redeploy.";
-  if (/out of memory|OOM/i.test(err)) return "La gráfica se quedó sin memoria. Puede que Ollama u otro programa la esté usando.";
+  // Ojo al orden: "CUDA failed with error out of memory" es falta de memoria, no de gráfica
+  if (/out of memory|OOM/i.test(err)) return "La gráfica se quedó sin memoria libre. Suele ser Ollama con un modelo cargado: se libera sola en un rato, o reiniciá Ollama y volvé a procesar.";
+  if (/CUDA|cuda|NVIDIA|nvidia/.test(err)) return "La gráfica no está disponible dentro del contenedor. Revisá que esté activado el acceso a GPU en Coolify y hacé Redeploy.";
   if (/11434|Ollama|Connection refused/i.test(err)) return "No se pudo conectar con Ollama. Revisá OLLAMA_URL y que el servicio esté encendido.";
   if (/ffmpeg/i.test(err)) return "Falló ffmpeg al procesar el vídeo.";
   if (/403|404|kick/i.test(err)) return "No se pudo descargar el VOD de Kick (puede que se haya borrado o sea privado).";
