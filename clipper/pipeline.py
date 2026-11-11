@@ -284,8 +284,10 @@ def process(source, s, key, title="", meta=None):
         llm.unload(s.ollama, s.model)  # que Ollama no ocupe la VRAM mientras corre Whisper
         transcript = transcribe.transcribe(
             wav, workdir, s.whisper, language=s.lang,
-            on_loading=lambda nombre, alternativa: p.update(0, (
-                f"La gráfica estaba sin memoria: probando con el modelo {nombre}, más liviano…" if alternativa
+            on_retry=lambda: llm.unload(s.ollama, s.model),
+            on_loading=lambda nombre, device, reintento: p.update(0, (
+                f"Faltó memoria en la gráfica: reintentando con {nombre}"
+                + (" por CPU (va a tardar bastante más)…" if device == "cpu" else ", más liviano…") if reintento
                 else f"Cargando Whisper {nombre} en la gráfica (la primera vez se descarga, ~3 GB)…")),
             on_progress=lambda sec, text: p.update(sec / total, f"{fmt(sec)} de {fmt(total)} · “{text[:90]}”"),
         )
